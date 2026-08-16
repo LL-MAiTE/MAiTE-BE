@@ -16,6 +16,7 @@ import com.likelion.hackathon.domain.user.entity.User;
 import com.likelion.hackathon.domain.user.repository.UserRepository;
 import com.likelion.hackathon.global.exception.CustomException;
 import com.likelion.hackathon.global.exception.ErrorCode;
+import com.likelion.hackathon.global.openai.OpenAiService;
 import com.likelion.hackathon.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class AgendaService {
     private final SourceDocumentRepository sourceDocumentRepository;
     private final ProjectService projectService;
     private final UserRepository userRepository;
+    private final OpenAiService openAiService;
 
     @Transactional(readOnly = true)
     public List<AgendaResponse> getAgendas(UUID projectId) {
@@ -122,8 +124,12 @@ public class AgendaService {
             throw new CustomException(ErrorCode.NO_REFERENCE_DOCUMENTS);
         }
 
-        // AI 연동 stub: 참조 문서 기반으로 샘플 안건 생성
-        List<Position> drafts = generateMockPositions(agenda, refDocs);
+        // OpenAI로 안건 초안 생성, 실패 시 mock fallback
+        List<OpenAiService.DraftPosition> aiDrafts = openAiService.generateDraftPositions(agenda, refDocs);
+        List<Position> drafts = aiDrafts.isEmpty()
+                ? generateMockPositions(agenda, refDocs)
+                : aiDrafts.stream().map(d -> toPosition(agenda, refDocs.get(0), d)).toList();
+
         positionRepository.saveAll(drafts);
         agenda.updateStatus(AgendaStatus.PREPARING);
 
@@ -238,6 +244,29 @@ public class AgendaService {
         if (anyApproved) {
             agenda.updateStatus(AgendaStatus.APPROVED);
         }
+    }
+
+    private Position toPosition(Agenda agenda, AgendaReferenceDocument ref, OpenAiService.DraftPosition d) {
+        List<String> activeFields = new ArrayList<>();
+        if (d.answer() != null) activeFields.add("answer");
+        if (d.preference() != null) activeFields.add("preference");
+        if (d.concessionRange() != null) activeFields.add("concessionRange");
+        if (d.dealbreaker() != null) activeFields.add("dealbreaker");
+
+        return Position.builder()
+                .agenda(agenda)
+                .topic(d.topic())
+                .questionText(d.questionText())
+                .generatedBy(GeneratedBy.AI_DRAFT)
+                .sourceDocument(ref.getSourceDocument())
+                .activeFields(activeFields)
+                .answer(d.answer())
+                .preference(d.preference())
+                .concessionRange(d.concessionRange())
+                .dealbreaker(d.dealbreaker())
+                .priority(d.priority())
+                .confidenceLevel(ConfidenceLevel.DOCUMENT_BASED)
+                .build();
     }
 
     private List<Position> generateMockPositions(Agenda agenda, List<AgendaReferenceDocument> refDocs) {

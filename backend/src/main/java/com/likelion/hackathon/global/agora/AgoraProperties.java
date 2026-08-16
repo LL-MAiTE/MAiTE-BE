@@ -26,4 +26,12 @@ public class AgoraProperties {
     private String callbackUrl;
     public String getCallbackUrl() { return callbackUrl; }
     public void setCallbackUrl(String callbackUrl) { this.callbackUrl = callbackUrl; }
+
+    private String llmAddon;
+    public String getLlmAddon() { return llmAddon; }
+    public void setLlmAddon(String llmAddon) { this.llmAddon = llmAddon; }
+
+    private String ttsAddon;
+    public String getTtsAddon() { return ttsAddon; }
+    public void setTtsAddon(String ttsAddon) { this.ttsAddon = ttsAddon; }
 }

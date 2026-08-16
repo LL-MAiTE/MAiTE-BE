@@ -1,3 +1,3 @@
 package com.likelion.hackathon.domain.meeting.dto;
 
-public record ChannelInfoResponse(String appId, String channelName) {}
+public record ChannelInfoResponse(String appId, String channelName, String token) {}

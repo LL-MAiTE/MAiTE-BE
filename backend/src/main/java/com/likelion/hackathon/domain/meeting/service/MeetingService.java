@@ -19,7 +19,9 @@ import com.likelion.hackathon.domain.notification.repository.NotificationReposit
 import com.likelion.hackathon.domain.project.service.ProjectService;
 import com.likelion.hackathon.global.agora.AgoraProperties;
 import com.likelion.hackathon.global.agora.AgoraService;
+import com.likelion.hackathon.global.agora.AgoraTokenUtil;
 import com.likelion.hackathon.global.agora.MeetingSystemPromptBuilder;
+import com.likelion.hackathon.global.openai.OpenAiService;
 import com.likelion.hackathon.global.exception.CustomException;
 import com.likelion.hackathon.global.exception.ErrorCode;
 import com.likelion.hackathon.global.security.SecurityUtil;
@@ -31,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -53,6 +56,7 @@ public class MeetingService {
     private final AgoraService agoraService;
     private final AgoraProperties agoraProperties;
     private final MeetingSystemPromptBuilder promptBuilder;
+    private final OpenAiService openAiService;
 
     @Transactional
     public MeetingResponse createMeeting(UUID agendaId) {
@@ -116,12 +120,24 @@ public class MeetingService {
             // 에이전트 실패해도 미팅은 진행
         }
 
-        return Map.of(
-                "disclosureCompletedAt", meeting.getDisclosureCompletedAt(),
-                "agoraAppId", agoraProperties.getAppId(),
-                "agoraChannel", meetingId.toString(),
-                "agoraAgentUid", 100
-        );
+        String rtcToken = null;
+        String cert = agoraProperties.getAppCertificate();
+        if (cert != null && !cert.isBlank()) {
+            try {
+                rtcToken = AgoraTokenUtil.buildTokenWithUid(
+                        agoraProperties.getAppId(), cert, meetingId.toString(), 0, 3600);
+            } catch (Exception e) {
+                log.warn("Agora token generation failed: {}", e.getMessage());
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("disclosureCompletedAt", meeting.getDisclosureCompletedAt());
+        result.put("agoraAppId", agoraProperties.getAppId());
+        result.put("agoraChannel", meetingId.toString());
+        result.put("agoraToken", rtcToken);
+        result.put("agoraAgentUid", 100);
+        return result;
     }
 
     @Transactional
@@ -140,7 +156,17 @@ public class MeetingService {
     public ChannelInfoResponse getChannelInfo(UUID meetingId) {
         UUID userId = SecurityUtil.getCurrentUserId();
         getMeetingAndVerify(meetingId, userId);
-        return new ChannelInfoResponse(agoraProperties.getAppId(), meetingId.toString());
+        String token = null;
+        String cert = agoraProperties.getAppCertificate();
+        if (cert != null && !cert.isBlank()) {
+            try {
+                token = AgoraTokenUtil.buildTokenWithUid(
+                        agoraProperties.getAppId(), cert, meetingId.toString(), 0, 3600);
+            } catch (Exception e) {
+                log.warn("Agora token generation failed: {}", e.getMessage());
+            }
+        }
+        return new ChannelInfoResponse(agoraProperties.getAppId(), meetingId.toString(), token);
     }
 
     @Transactional
@@ -267,6 +293,18 @@ public class MeetingService {
     }
 
     private MeetingPosition findBestMatch(String text, List<MeetingPosition> positions) {
+        if (positions.isEmpty()) return null;
+
+        // OpenAI 의미 매칭 시도, 실패 시 키워드 매칭 fallback
+        UUID matchedId = openAiService.findMatchingPositionId(text, positions);
+        if (matchedId != null) {
+            UUID finalMatchedId = matchedId;
+            return positions.stream()
+                    .filter(mp -> mp.getId().equals(finalMatchedId))
+                    .findFirst().orElse(null);
+        }
+
+        // fallback: 키워드 매칭
         String lowerText = text.toLowerCase();
         for (MeetingPosition mp : positions) {
             String topic = mp.getPosition().getTopic().toLowerCase();

@@ -22,7 +22,9 @@ openai:
 
 agora:
   app-id: ${AGORA_APP_ID}
-  app-certificate: ${AGORA_APP_CERTIFICATE}
+  app-certificate: ${AGORA_APP_CERTIFICATE:}
   customer-key: ${AGORA_CUSTOMER_KEY}
   customer-secret: ${AGORA_CUSTOMER_SECRET}
   callback-url: ${AGORA_CALLBACK_URL:}
+  llm-addon: ${AGORA_LLM_ADDON:openai-llm}
+  tts-addon: ${AGORA_TTS_ADDON:openai-tts}
