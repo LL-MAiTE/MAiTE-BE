@@ -3,6 +3,7 @@ package com.likelion.hackathon.domain.document.service;
 import com.likelion.hackathon.domain.document.dto.*;
 import com.likelion.hackathon.domain.document.entity.SourceConnection;
 import com.likelion.hackathon.domain.document.entity.SourceDocument;
+import com.likelion.hackathon.domain.document.entity.enums.ConnectionType;
 import com.likelion.hackathon.domain.document.repository.SourceConnectionRepository;
 import com.likelion.hackathon.domain.document.repository.SourceDocumentRepository;
 import com.likelion.hackathon.domain.project.entity.Project;
@@ -11,12 +12,14 @@ import com.likelion.hackathon.domain.user.entity.User;
 import com.likelion.hackathon.domain.user.repository.UserRepository;
 import com.likelion.hackathon.global.exception.CustomException;
 import com.likelion.hackathon.global.exception.ErrorCode;
+import com.likelion.hackathon.global.github.GitHubService;
 import com.likelion.hackathon.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ public class DocumentService {
     private final SourceDocumentRepository documentRepository;
     private final ProjectService projectService;
     private final UserRepository userRepository;
+    private final GitHubService gitHubService;
 
     @Transactional
     public SourceConnectionResponse createConnection(UUID projectId, CreateConnectionRequest request) {
@@ -52,15 +56,45 @@ public class DocumentService {
         UUID userId = SecurityUtil.getCurrentUserId();
         SourceConnection connection = connectionRepository.findById(connectionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SOURCE_CONNECTION_NOT_FOUND));
-        projectService.getProjectAndVerifyMember(connection.getProject().getId(), userId);
+        Project project = projectService.getProjectAndVerifyMember(connection.getProject().getId(), userId);
 
-        // 실제 외부 연동 대신 stub: 기존 문서 syncedAt 갱신
+        if (connection.getType() == ConnectionType.GIT) {
+            return syncGit(project, connection);
+        }
+
+        // GIT 외 타입(예: NOTION)은 아직 미구현 — 기존 문서 syncedAt만 갱신
         List<SourceDocument> docs = documentRepository.findAllByConnection(connection);
         LocalDateTime now = LocalDateTime.now();
         docs.forEach(doc -> doc.updateSyncInfo(now));
 
         List<String> latestFiles = docs.stream().map(SourceDocument::getTitle).toList();
         return new SyncResponse(docs.size(), latestFiles);
+    }
+
+    private SyncResponse syncGit(Project project, SourceConnection connection) {
+        List<GitHubService.RemoteFile> files = gitHubService.fetchDocuments(
+                connection.getWorkspaceOrRepoName(), connection.getAccessToken());
+
+        LocalDateTime now = LocalDateTime.now();
+        List<String> titles = new ArrayList<>();
+        for (GitHubService.RemoteFile file : files) {
+            String title = fileName(file.path());
+            SourceDocument doc = documentRepository.findByConnectionAndPath(connection, file.path())
+                    .orElseGet(() -> SourceDocument.builder()
+                            .project(project)
+                            .connection(connection)
+                            .path(file.path())
+                            .build());
+            doc.updateFromSync(title, file.content(), now);
+            documentRepository.save(doc);
+            titles.add(title);
+        }
+        return new SyncResponse(files.size(), titles);
+    }
+
+    private String fileName(String path) {
+        int idx = path.lastIndexOf('/');
+        return idx >= 0 ? path.substring(idx + 1) : path;
     }
 
     @Transactional

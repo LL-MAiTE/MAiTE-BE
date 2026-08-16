@@ -55,4 +55,11 @@ public class SourceDocument {
         this.syncedAt = syncedAt;
         this.lastModifiedAt = syncedAt;
     }
+
+    public void updateFromSync(String title, String content, LocalDateTime syncedAt) {
+        this.title = title;
+        this.content = content;
+        this.syncedAt = syncedAt;
+        this.lastModifiedAt = syncedAt;
+    }
 }
