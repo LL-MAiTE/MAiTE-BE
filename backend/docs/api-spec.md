@@ -62,8 +62,8 @@
 |------|--------|------|------|-------------|---------------|
 | ✅ | POST | `/agendas/:id/meetings` | 미팅 세션 생성 (승인 안건 스냅샷 → meeting_positions 기록) | - | `{ id, agendaId, status: "IN_PROGRESS", ... }` |
 | ✅ | GET | `/meetings/:id` | 미팅 단건 조회 | - | `{ id, agendaId, status, startedAt, disclosureCompletedAt, agoraAgentId, ... }` |
-| ✅ | GET | `/meetings/:id/channel-info` | Agora 채널 정보 조회 (프론트가 채널 입장 전 호출) | - | `{ appId, channelName }` |
-| ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraAgentUid }` |
+| ✅ | GET | `/meetings/:id/channel-info` | Agora 채널 정보 조회 (프론트가 채널 입장 전 호출) | - | `{ appId, channelName, token }` |
+| ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraToken, agoraAgentUid: 100 }` |
 | ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 | - | `{ success: true }` |
 | ✅ | POST | `/meetings/:id/transcripts` | 수동 전사 텍스트 저장 (테스트·보완용) | `{ speakerLabel, language, text, spokenAt, confidence }` | `{ id, meetingId, speakerLabel, language, text, spokenAt, confidence }` |
 | ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록 | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, status: "DELIVERED"/"ON_HOLD" }` |
@@ -143,13 +143,62 @@
 
 ---
 
+## Agora RTC 연동 (프론트엔드 참고)
+
+### 미팅 시작 후 채널 입장 흐름
+
+```
+POST /meetings/:id/start
+→ { agoraAppId, agoraChannel, agoraToken, agoraAgentUid: 100 }
+
+// Agora RTC SDK (npm: agora-rtc-sdk-ng, 테스트 버전: 4.21.0)
+const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' })
+await client.join(agoraAppId, agoraChannel, agoraToken, null)
+await client.publish([cameraTrack, micTrack])
+```
+
+- `agoraToken`: UID=0(랜덤 배정)으로 발급 → `client.join()` 4번째 인자 `null`
+- AI 에이전트 UID = **100** (예약됨) — `user.uid === 100`이면 AI
+- AI는 오디오만 발행, 비디오 없음
+
+### 실시간 전사 (stream-message)
+
+Agora ConvAI가 채널 내 모든 참가자에게 전사 결과를 데이터 스트림으로 전송.
+
+**수신 포맷**: `{hex_id}|{chunk_index}|{total_chunks}|{base64_json}`  
+→ 같은 `hex_id`의 청크를 순서대로 합쳐서 base64 디코딩 → JSON 파싱
+
+**JSON 필드**:
+
+| 필드 | 값 |
+|------|----|
+| `object` | `"assistant.transcription"` (AI 발화) \| `"user.transcription"` (사용자 발화) |
+| `text` | 전사 텍스트 |
+| `final` | `true` = 확정 / `false` = 중간 결과 |
+
+```javascript
+const chunkBuf = {}
+client.on('stream-message', (uid, data) => {
+  const parts = new TextDecoder().decode(data).split('|')
+  if (parts.length < 4) return
+  const [msgId, idxStr, totalStr, b64] = parts
+  const idx = parseInt(idxStr) - 1, total = parseInt(totalStr)
+  if (!chunkBuf[msgId]) chunkBuf[msgId] = new Array(total).fill(null)
+  chunkBuf[msgId][idx] = b64
+  if (chunkBuf[msgId].some(c => c === null)) return
+  const msg = JSON.parse(atob(chunkBuf[msgId].join('')))
+  delete chunkBuf[msgId]
+  // msg.object, msg.text, msg.final
+})
+```
+
+---
+
 ## 미구현 / 추후 연동 필요
 
 | 항목 | 설명 |
 |------|------|
-| AI 안건 생성 | 현재 키워드 기반 stub — OpenAI API 연동으로 교체 필요 |
 | 발화 의미 매칭 | 현재 키워드 매칭 stub — 임베딩 기반 유사도 매칭으로 교체 필요 |
 | Notion/Git 실제 동기화 | 현재 stub — 실제 API 연동 필요 |
 | 24~48h 타임아웃 자동확정 | `PATCH /hold-items/:id` 호출하는 스케줄러 별도 구현 필요 |
-| Agora 인증 토큰 | 현재 No Authentication 모드 — 운영 전 RTC 토큰 발급 로직 추가 필요 |
-| TTS/LLM 키 | Agora Conversational AI는 OpenAI Realtime API 키 필요 (별도 비용) |
+| LLM 응답 실패 처리 | Agora ConvAI → OpenAI LLM 호출 실패 시 failure_message 출력 — 원인 미확정 (rate limit 의심) |
