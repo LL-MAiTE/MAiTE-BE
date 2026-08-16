@@ -46,4 +46,13 @@ public class SourceDocument {
     private LocalDateTime lastModifiedAt;
 
     private LocalDateTime syncedAt;
+
+    public void setCoreContext(boolean isCoreContext) {
+        this.isCoreContext = isCoreContext;
+    }
+
+    public void updateSyncInfo(LocalDateTime syncedAt) {
+        this.syncedAt = syncedAt;
+        this.lastModifiedAt = syncedAt;
+    }
 }

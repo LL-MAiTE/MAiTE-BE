@@ -12,7 +12,17 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true
+    show-sql: false
 
 jwt:
   secret: ${JWT_SECRET}
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+
+agora:
+  app-id: ${AGORA_APP_ID}
+  app-certificate: ${AGORA_APP_CERTIFICATE}
+  customer-key: ${AGORA_CUSTOMER_KEY}
+  customer-secret: ${AGORA_CUSTOMER_SECRET}
+  callback-url: ${AGORA_CALLBACK_URL:}

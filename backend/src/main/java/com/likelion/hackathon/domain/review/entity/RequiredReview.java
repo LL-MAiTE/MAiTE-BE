@@ -42,4 +42,10 @@ public class RequiredReview {
     private User reviewedBy;
 
     private LocalDateTime reviewedAt;
+
+    public void confirm(User reviewer) {
+        this.status = RequiredReviewStatus.CONFIRMED;
+        this.reviewedBy = reviewer;
+        this.reviewedAt = LocalDateTime.now();
+    }
 }

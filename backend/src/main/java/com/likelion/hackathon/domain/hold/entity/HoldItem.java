@@ -71,4 +71,38 @@ public class HoldItem extends BaseTimeEntity {
     private HoldItemStatus status = HoldItemStatus.UNRESOLVED;
 
     private LocalDateTime resolvedAt;
+
+    public void answer(String answerText, User answeredBy) {
+        this.answerText = answerText;
+        this.answeredBy = answeredBy;
+        this.answeredAt = LocalDateTime.now();
+        this.status = HoldItemStatus.AWAITING_ANSWER;
+    }
+
+    public void deliver() {
+        this.deliveredToCounterpartAt = LocalDateTime.now();
+    }
+
+    public void reopen() {
+        if (this.reopenCount >= 2) {
+            throw new IllegalStateException("재오픈 횟수 상한(2회)에 도달했습니다.");
+        }
+        this.reopenCount++;
+        this.status = HoldItemStatus.REOPENED;
+    }
+
+    public void confirmImmediate() {
+        this.status = HoldItemStatus.CONFIRMED_IMMEDIATE;
+        this.resolvedAt = LocalDateTime.now();
+    }
+
+    public void confirmByTimeout() {
+        this.status = HoldItemStatus.CONFIRMED_TIMEOUT;
+        this.resolvedAt = LocalDateTime.now();
+    }
+
+    public void needsRealtime() {
+        this.status = HoldItemStatus.NEEDS_REALTIME;
+        this.resolvedAt = LocalDateTime.now();
+    }
 }

@@ -1,134 +1,155 @@
 # API 명세서
 
-ERD v4 / 유저플로우 v5 기준. MVP 12개 테이블(기반/문서연동/회의준비/미팅실행/신뢰성) 우선순위 엔드포인트를 먼저 상세히 정리했고, 중간/낮음 우선순위는 뒤에 간단히 붙였습니다. 프론트/AI 팀과 이 문서를 기준으로 필드명 맞추면 됩니다.
+> **범례**: ✅ 구현 완료 · ❌ 미구현  
+> 모든 요청(회원가입·로그인 제외)은 `Authorization: Bearer {token}` 헤더 필요
 
 ---
 
 ## 인증
 
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| POST | /auth/signup | 계정 가입 | `{ email, password, name }` | `{ id, email }` |
-| POST | /auth/login | 로그인 | `{ email, password }` | `{ token, user }` |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/auth/signup` | 회원가입 | `{ email, password, name }` | `{ token, user: { id, email, name } }` |
+| ✅ | POST | `/auth/login` | 로그인 | `{ email, password }` | `{ token, user: { id, email, name } }` |
 
 ---
 
-## 프로젝트 / 멤버 (기반)
+## 프로젝트 / 멤버
 
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| POST | /projects | 프로젝트 생성 | `{ name }` | `{ id, name, createdAt }` |
-| GET | /projects | 내 프로젝트 목록 | - | `project[]` |
-| GET | /projects/:id | 프로젝트 단건 조회 | - | `project` |
-| POST | /projects/:id/members | 멤버 초대/역할 부여 | `{ userId, role }` | `projectMember` |
-
----
-
-## 문서연동 — 🔴 최상 (기능 1)
-
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| POST | /projects/:id/connections | Notion/Git 연동 등록 | `{ type, workspaceOrRepoName, accessToken }` | `sourceConnection` |
-| POST | /connections/:id/sync | 연동 소스에서 문서 동기화 | - | `{ syncedCount, latestFiles: [...] }` |
-| POST | /projects/:id/documents | md 파일 직접 업로드 | `{ title, content }` 또는 `file` | `sourceDocument` |
-| PATCH | /documents/:id | 핵심 맥락 md 지정 등 | `{ isCoreContext }` | `sourceDocument` |
-| GET | /projects/:id/documents | 프로젝트에 쌓인 문서 목록 (회의 생성 시 파일 선택 화면에서 호출) | - | `sourceDocument[]` |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/projects` | 프로젝트 생성 (생성자는 자동으로 TEAM_MANAGER) | `{ name }` | `{ id, name, createdAt }` |
+| ✅ | GET | `/projects` | 내가 속한 프로젝트 목록 | - | `project[]` |
+| ✅ | GET | `/projects/:id` | 프로젝트 단건 조회 | - | `{ id, name, createdAt }` |
+| ✅ | POST | `/projects/:id/members` | 멤버 초대 및 역할 부여 | `{ userId, role }` | `{ id, userId, userName, userEmail, role }` |
 
 ---
 
-## 회의 준비 — 🔴 최상 ~ 🟠 높음 (기능 1, 2, 3)
+## 문서 연동
 
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| GET | /projects/:id/agendas | 프로젝트 내 회의 목록 | - | `agenda[]` |
-| GET | /agendas/:id | 회의 단건 조회 | - | `agenda` |
-| POST | /agendas | 회의 생성 (이름+목적) | `{ projectId, title, purpose, counterpartCountry, counterpartLanguage, transcriptLanguages, translationSourceLanguages, translationTargetLanguages }` | `agenda` (status=준비전) |
-| POST | /agendas/:id/reference-documents | **관련 파일 선택 (필수, 최소 1개)** | `{ sourceDocumentIds: [...] }` | `agendaReferenceDocument[]` |
-| PATCH | /agenda-reference-documents/:id | 문서 제외 처리 | `{ excluded: true }` | `agendaReferenceDocument` |
-| POST | /agendas/:id/draft-positions | 선택 파일 범위 내 AI 안건 초안 생성 | - | `position[]` (generatedBy=ai_draft, activeFields 포함) |
-| GET | /agendas/:id/positions | 안건(항목) 목록 조회 | - | `position[]` |
-| POST | /agendas/:id/positions | 안건 직접 추가 | `{ topic, questionText, answer, preference, concessionRange, dealbreaker, priority, scheduleConstraint }` | `position` (generatedBy=user, version=1) |
-| POST | /positions/:id/approve | 안건 승인 (수정 없이) | `{ approvalStatus }` | `position` |
-| POST | /positions/:id/revise | 안건 수정 후 승인 — 기존 레코드는 isLatest=false, 새 version 레코드 생성. **응답의 id는 새로 생성된 레코드의 id** (호출 시 넘긴 `:id`와 다름) | `{ approvalStatus, ...수정필드 }` | `position` (새 id, version +1, isLatest=true) |
-| POST | /positions/:id/reject | 안건 반려 | `{ approvalStatus }` | `position` |
-| DELETE | /positions/:id | 안건 삭제 | - | `{ status: 삭제됨 }` (매칭 대상에서 제외) |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/projects/:id/connections` | Notion/Git 연동 등록 | `{ type, workspaceOrRepoName, accessToken }` | `{ id, type, workspaceOrRepoName, connectedBy, connectedAt }` |
+| ✅ | POST | `/connections/:id/sync` | 연동 소스에서 문서 동기화 (stub) | - | `{ syncedCount, latestFiles: string[] }` |
+| ✅ | POST | `/projects/:id/documents` | md 파일 직접 업로드 | `{ title, content }` | `{ id, projectId, title, isCoreContext, lastModifiedAt, ... }` |
+| ✅ | PATCH | `/documents/:id` | 핵심 맥락 md 지정 등 문서 속성 수정 | `{ isCoreContext }` | `{ id, projectId, title, isCoreContext, ... }` |
+| ✅ | GET | `/projects/:id/documents` | 프로젝트 문서 목록 (핵심맥락 우선 정렬) | - | `sourceDocument[]` |
 
 ---
 
-## 미팅 실행 — 🟠 높음 (기능 4, 5, 6)
+## 회의 준비
 
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| POST | /agendas/:id/meetings | 미팅 세션 생성 (승인된 안건 스냅샷 확정 → meeting_positions 기록) | - | `meeting` (status=진행중) |
-| GET | /meetings/:id | 미팅 단건 조회 (현재 status 포함) | - | `meeting` |
-| POST | /meetings/:id/start | 미팅 시작 + AI 대리진행 고지 트리거 | - | `{ disclosureCompletedAt }` |
-| POST | /meetings/:id/transcripts | (Agora 웹훅) 실시간 전사 텍스트 수신 | `{ speakerLabel, language, text, spokenAt, confidence }` | `transcript` |
-| POST | /meetings/:id/meeting-logs | (내부 로직) 발화 ↔ 승인 안건 매칭 + 통역 전달 | `{ transcriptId }` | `meetingLog` (matchedMeetingPositionId, translatedText, status) |
-| GET | /meetings/:id/meeting-logs | 미팅 로그 조회 (사후검토용) | - | `meetingLog[]` |
-
----
-
-## 신뢰성 — 🟠 높음 (기능 6, 숫자 확인)
-
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| POST | /meeting-logs/:id/number-confirmation | 숫자/단위 포함 답변 → 확인 팝업 트리거 | `{ detectedValue }` | `numberConfirmation` (popupShownAt) |
-| PATCH | /number-confirmations/:id | O/X 응답 또는 타임아웃 처리 | `{ responseType }` | `numberConfirmation` (미응답 10초 경과 시 자동 responseType=미응답_자동보류) |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | GET | `/projects/:id/agendas` | 프로젝트 내 회의 목록 | - | `agenda[]` |
+| ✅ | GET | `/agendas/:id` | 회의 단건 조회 | - | `{ id, projectId, title, purpose, status, ... }` |
+| ✅ | POST | `/agendas` | 회의 생성 | `{ projectId, title, purpose, counterpartCountry, counterpartLanguage, transcriptLanguages, translationSourceLanguages, translationTargetLanguages }` | `{ id, title, status: "READY", ... }` |
+| ✅ | POST | `/agendas/:id/reference-documents` | 참조 문서 선택 (최소 1개 필수) | `{ sourceDocumentIds: uuid[] }` | `agendaReferenceDocument[]` |
+| ✅ | PATCH | `/agenda-reference-documents/:id` | 참조 문서 제외 처리 | `{ excluded: true }` | `{ id, excluded, ... }` |
+| ✅ | POST | `/agendas/:id/draft-positions` | AI 안건 초안 생성 (현재 stub, 문서 기반 샘플 3개 반환) | - | `position[]` (generatedBy: "AI_DRAFT") |
+| ✅ | GET | `/agendas/:id/positions` | 안건 목록 조회 (최신 버전만) | - | `position[]` |
+| ✅ | POST | `/agendas/:id/positions` | 안건 직접 추가 | `{ topic, questionText, answer, preference, concessionRange, dealbreaker, priority, scheduleConstraint }` | `{ id, generatedBy: "USER", version: 1, ... }` |
+| ✅ | POST | `/positions/:id/approve` | 안건 승인 | `{ approvalStatus }` | `{ id, approvalStatus, approvedBy, approvedAt, ... }` |
+| ✅ | POST | `/positions/:id/revise` | 안건 수정 후 승인 (구 레코드 isLatest=false, 새 레코드 생성) | `{ approvalStatus, topic?, questionText?, answer?, preference?, concessionRange?, dealbreaker?, priority?, scheduleConstraint? }` | `{ id(새 id), version+1, isLatest: true, ... }` |
+| ✅ | POST | `/positions/:id/reject` | 안건 반려 | - | `{ id, approvalStatus: "REJECTED", ... }` |
+| ✅ | DELETE | `/positions/:id` | 안건 삭제 (매칭 대상에서 제외) | - | `{ success: true }` |
 
 ---
 
-## 알림 — 🟠 중간
+## 미팅 실행
 
-| Method | Path | 설명 | Request | Response |
-|--------|------|------|---------|----------|
-| GET | /notifications | 내 알림 목록 | - | `notification[]` |
-| PATCH | /notifications/:id/read | 알림 읽음 처리 | - | `notification` |
-| PATCH | /notifications/read-all | 전체 읽음 처리 | - | `{ updatedCount }` |
-
-> 알림 발생 시점: 보류 항목 전달, 재오픈 요청, 자동확정, 실시간조율필요, 미팅 자동 종료. 실제 전달 수단(이메일/푸시/인앱)은 `notifications` 테이블 기반으로 확장 가능.
-
----
-
-## 협의/보류 — 🟡 중간 (기능 7, 8, 8-1)
-
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | /coordination-records | 승인범위 내 대안 조율 결과 저장 |
-| GET | /meetings/:id/hold-items | 보류 항목 목록 조회 |
-| POST | /hold-items/:id/answer | 답변 작성자 후속 답변 → 비동기 전달 (deliveredToCounterpartAt 기록, 이때부터 24~48h 타임아웃 카운트) |
-| POST | /hold-items/:id/reopen | 상대방 재오픈 (reopenCount +1, 최대 2회) |
-| PATCH | /hold-items/:id | 내부 배치: 타임아웃 자동확정 / 재오픈 상한 도달 시 실시간조율필요 처리 |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/agendas/:id/meetings` | 미팅 세션 생성 (승인 안건 스냅샷 → meeting_positions 기록) | - | `{ id, agendaId, status: "IN_PROGRESS", ... }` |
+| ✅ | GET | `/meetings/:id` | 미팅 단건 조회 | - | `{ id, agendaId, status, startedAt, disclosureCompletedAt, agoraAgentId, ... }` |
+| ✅ | GET | `/meetings/:id/channel-info` | Agora 채널 정보 조회 (프론트가 채널 입장 전 호출) | - | `{ appId, channelName }` |
+| ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraAgentUid }` |
+| ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 | - | `{ success: true }` |
+| ✅ | POST | `/meetings/:id/transcripts` | 수동 전사 텍스트 저장 (테스트·보완용) | `{ speakerLabel, language, text, spokenAt, confidence }` | `{ id, meetingId, speakerLabel, language, text, spokenAt, confidence }` |
+| ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록 | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, status: "DELIVERED"/"ON_HOLD" }` |
+| ✅ | GET | `/meetings/:id/meeting-logs` | 미팅 로그 조회 (사후검토용) | - | `meetingLog[]` |
 
 ---
 
-## 사후검토 — 🟢 낮음 (기능 9, 10, 8-1)
+## 신뢰성 — 숫자 확인
 
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | /meeting-logs/:id/review-actions | 승인/수정/철회/**재보류** (재보류 시 holdItems 새 레코드 자동 생성) |
-| POST | /required-reviews | 질문 참여자가 필수검토 지정 |
-| PATCH | /required-reviews/:id | 답변 작성자 확인 처리 (조건부합의 → 확정) |
-
----
-
-## 운영관리 — 🟢 낮음 (백로그)
-
-| Method | Path | 설명 |
-|--------|------|------|
-| PATCH | /projects/:id/retention-policy | 데이터 보관기간/삭제정책 설정 |
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/meeting-logs/:id/number-confirmation` | 숫자/단위 포함 답변 확인 팝업 트리거 | `{ detectedValue }` | `{ id, meetingLogId, detectedValue, popupShownAt }` |
+| ✅ | PATCH | `/number-confirmations/:id` | O/X 응답 또는 타임아웃 처리 (AUTO_HOLD 시 hold_item 자동 생성) | `{ responseType }` (`CONFIRMED`\|`REJECTED`\|`AUTO_HOLD`) | `{ id, responseType, respondedAt, resultedInHold }` |
 
 ---
 
-## 인증/권한 공통 규칙
+## 알림
 
-- 모든 요청은 `Authorization: Bearer {token}` 필요 (회원가입/로그인 제외)
-- `PATCH /positions/:id`, `POST /agendas/:id/reference-documents` 등 승인 관련 액션은 **해당 안건의 답변 작성자 본인만** 호출 가능
-- `Agora 웹훅` 계열(`/transcripts`, 내부 매칭 로직)은 별도 웹훅 시크릿 검증 필요
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | GET | `/notifications` | 내 알림 목록 (최신순) | - | `{ id, type, referenceId, referenceType, isRead, createdAt }[]` |
+| ✅ | PATCH | `/notifications/:id/read` | 알림 읽음 처리 | - | `{ id, isRead: true, ... }` |
+| ✅ | PATCH | `/notifications/read-all` | 전체 읽음 처리 | - | `{ updatedCount }` |
 
 ---
 
-## 다음에 할 일
+## 협의 / 보류
 
-1. 이 문서 그대로 팀 전체(프론트/AI)에 공유해서 필드명 이견 있는지 확인
-2. Request/Response 예시 값까지 채워서 Postman 컬렉션 또는 Swagger로 옮기기 (FastAPI면 자동 생성됨)
-3. MVP 그룹(인증 → 문서연동 → 회의준비 → 미팅실행 → 신뢰성) 순서로 실제 구현 착수
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/coordination-records?meetingId=` | 승인 범위 내 대안 조율 결과 저장 (OUT_OF_RANGE 시 hold_item 자동 생성) | `{ positionId, proposedContent, result, nextAction }` | `{ id, meetingId, positionId, result, resultingHoldItemId, ... }` |
+| ✅ | GET | `/meetings/:id/hold-items` | 보류 항목 목록 조회 | - | `holdItem[]` |
+| ✅ | POST | `/hold-items/:id/answer` | 답변 작성자 후속 답변 → 비동기 전달 | `{ answerText }` | `{ id, answerText, answeredAt, deliveredToCounterpartAt, status, ... }` |
+| ✅ | POST | `/hold-items/:id/reopen` | 상대방 재오픈 (최대 2회, 초과 시 NEEDS_REALTIME 자동 처리) | - | `{ id, reopenCount, status, ... }` |
+| ✅ | PATCH | `/hold-items/:id` | 배치용 상태 변경 (타임아웃 자동확정 / 실시간조율필요) | `{ status }` (`CONFIRMED_TIMEOUT`\|`NEEDS_REALTIME`) | `{ id, status, resolvedAt, ... }` |
+
+---
+
+## 사후 검토
+
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/meeting-logs/:id/review-actions` | 승인/수정/철회/재보류 (RE_HELD 시 hold_item 자동 생성) | `{ action, note? }` (`APPROVED`\|`REVISED`\|`WITHDRAWN`\|`RE_HELD`) | `{ id, meetingLogId, action, resultingHoldItemId, note, ... }` |
+| ✅ | POST | `/required-reviews?meetingLogId=` | 질문 참여자가 필수 검토 지정 | - | `{ id, meetingLogId, designatedBy, status: "CONDITIONAL", ... }` |
+| ✅ | PATCH | `/required-reviews/:id` | 답변 작성자 확인 처리 (조건부합의 → 확정) | - | `{ id, status: "CONFIRMED", reviewedBy, reviewedAt }` |
+
+---
+
+## 공통 응답 형식
+
+```json
+// 성공
+{ "success": true, "data": { ... } }
+
+// 실패
+{ "success": false, "message": "에러 메시지" }
+```
+
+## 공통 에러 코드
+
+| HTTP | 상황 |
+|------|------|
+| 400 | 요청 필드 누락 / 유효성 오류 |
+| 401 | 토큰 없음 또는 만료 |
+| 403 | 프로젝트 멤버 아님 / 권한 없음 |
+| 404 | 리소스 없음 |
+| 409 | 이메일 중복 / 이미 멤버 |
+| 500 | 서버 오류 |
+
+## 내부 웹훅 (Agora → 백엔드, 인증 불필요)
+
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | POST | `/agora/callback` | Agora Conversational AI 대화 턴 수신 — 사람 발화 + AI 응답을 transcript/meeting_log로 자동 저장 | `{ channel, agentId, turnId, userTranscription, agentResponse, startMs, endMs }` | `200 OK` |
+
+> Agora 콘솔 Webhooks에 `https://{서버주소}/agora/callback` 등록 필요 (개발 시 ngrok 사용)
+
+---
+
+## 미구현 / 추후 연동 필요
+
+| 항목 | 설명 |
+|------|------|
+| AI 안건 생성 | 현재 키워드 기반 stub — OpenAI API 연동으로 교체 필요 |
+| 발화 의미 매칭 | 현재 키워드 매칭 stub — 임베딩 기반 유사도 매칭으로 교체 필요 |
+| Notion/Git 실제 동기화 | 현재 stub — 실제 API 연동 필요 |
+| 24~48h 타임아웃 자동확정 | `PATCH /hold-items/:id` 호출하는 스케줄러 별도 구현 필요 |
+| Agora 인증 토큰 | 현재 No Authentication 모드 — 운영 전 RTC 토큰 발급 로직 추가 필요 |
+| TTS/LLM 키 | Agora Conversational AI는 OpenAI Realtime API 키 필요 (별도 비용) |

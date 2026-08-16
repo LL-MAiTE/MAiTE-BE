@@ -65,4 +65,8 @@ public class Agenda extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
+
+    public void updateStatus(AgendaStatus status) {
+        this.status = status;
+    }
 }

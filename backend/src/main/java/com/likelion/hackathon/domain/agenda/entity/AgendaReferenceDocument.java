@@ -41,4 +41,8 @@ public class AgendaReferenceDocument {
 
     @Column(nullable = false)
     private LocalDateTime addedAt;
+
+    public void exclude() {
+        this.excluded = true;
+    }
 }

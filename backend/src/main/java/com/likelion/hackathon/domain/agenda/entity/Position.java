@@ -90,4 +90,18 @@ public class Position {
     private User approvedBy;
 
     private LocalDateTime approvedAt;
+
+    public void approve(User approver, ApprovalStatus status) {
+        this.approvalStatus = status;
+        this.approvedBy = approver;
+        this.approvedAt = LocalDateTime.now();
+    }
+
+    public void reject() {
+        this.approvalStatus = ApprovalStatus.REJECTED;
+    }
+
+    public void markNotLatest() {
+        this.isLatest = false;
+    }
 }

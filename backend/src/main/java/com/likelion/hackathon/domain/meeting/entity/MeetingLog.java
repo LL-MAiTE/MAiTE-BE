@@ -50,4 +50,13 @@ public class MeetingLog {
     @Column(nullable = false)
     @Builder.Default
     private MeetingLogStatus status = MeetingLogStatus.PENDING;
+
+    public void deliver() {
+        this.status = MeetingLogStatus.DELIVERED;
+        this.deliveredAt = LocalDateTime.now();
+    }
+
+    public void hold() {
+        this.status = MeetingLogStatus.ON_HOLD;
+    }
 }

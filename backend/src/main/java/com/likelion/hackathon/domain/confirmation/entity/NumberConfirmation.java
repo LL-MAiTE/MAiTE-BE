@@ -39,4 +39,10 @@ public class NumberConfirmation {
     @Column(nullable = false)
     @Builder.Default
     private boolean resultedInHold = false;
+
+    public void respond(ConfirmationResponseType responseType) {
+        this.responseType = responseType;
+        this.respondedAt = LocalDateTime.now();
+        this.resultedInHold = responseType != ConfirmationResponseType.CONFIRMED;
+    }
 }
