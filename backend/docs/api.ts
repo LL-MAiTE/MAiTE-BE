@@ -1,0 +1,332 @@
+/**
+ * 백엔드 API 클라이언트
+ *
+ * 사용법:
+ *   import { api } from './api'
+ *
+ *   // 로그인
+ *   const { token } = await api.auth.login({ email, password })
+ *
+ *   // 미팅 시작
+ *   const info = await api.meetings.start(meetingId)
+ *   await client.join(info.agoraAppId, info.agoraChannel, info.agoraToken, null)
+ */
+
+import type {
+  ApiResponse,
+  AuthResponse,
+  SignupRequest,
+  LoginRequest,
+  User,
+  Project,
+  ProjectMember,
+  SourceDocument,
+  Agenda,
+  CreateAgendaRequest,
+  Position,
+  CreatePositionRequest,
+  ApprovePositionRequest,
+  Meeting,
+  MeetingStartResponse,
+  ChannelInfo,
+  MeetingLog,
+  Transcript,
+  CreateTranscriptRequest,
+  HoldItem,
+  Notification,
+  NumberConfirmation,
+  NumberConfirmationResponseType,
+  RequiredReview,
+  ReviewAction,
+  ReviewActionResult,
+  CoordinationRecord,
+  CoordinationResult,
+} from './shared'
+
+// ── 설정 ──────────────────────────────────────────────────────────────────
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080'
+
+let _token: string | null = null
+
+export function setToken(token: string) {
+  _token = token
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+
+  const json: ApiResponse<T> = await res.json()
+
+  if (!json.success) {
+    throw new Error(json.message ?? `API error: ${res.status}`)
+  }
+
+  return json.data
+}
+
+// ── API ───────────────────────────────────────────────────────────────────
+
+export const api = {
+
+  // ── 인증 ────────────────────────────────────────────────────────────────
+
+  auth: {
+    /** POST /auth/signup */
+    signup: (body: SignupRequest) =>
+      request<AuthResponse>('POST', '/auth/signup', body),
+
+    /** POST /auth/login */
+    login: async (body: LoginRequest) => {
+      const data = await request<AuthResponse>('POST', '/auth/login', body)
+      setToken(data.token)
+      return data
+    },
+  },
+
+  // ── 사용자 ────────────────────────────────────────────────────────────────
+
+  users: {
+    /** GET /users?email= — 이메일로 사용자 검색 (멤버 초대 시 userId 조회용) */
+    searchByEmail: (email: string) =>
+      request<User>('GET', `/users?email=${encodeURIComponent(email)}`),
+  },
+
+  // ── 프로젝트 ──────────────────────────────────────────────────────────
+
+  projects: {
+    /** POST /projects */
+    create: (name: string) =>
+      request<Project>('POST', '/projects', { name }),
+
+    /** GET /projects */
+    list: () =>
+      request<Project[]>('GET', '/projects'),
+
+    /** GET /projects/:id */
+    get: (id: string) =>
+      request<Project>('GET', `/projects/${id}`),
+
+    /** GET /projects/:id/members */
+    listMembers: (projectId: string) =>
+      request<ProjectMember[]>('GET', `/projects/${projectId}/members`),
+
+    /** POST /projects/:id/members */
+    addMember: (projectId: string, userId: string, role: 'TEAM_MANAGER' | 'MEMBER') =>
+      request<ProjectMember>('POST', `/projects/${projectId}/members`, { userId, role }),
+  },
+
+  // ── 문서 ────────────────────────────────────────────────────────────────
+
+  documents: {
+    /** POST /projects/:id/documents */
+    upload: (projectId: string, title: string, content: string) =>
+      request<SourceDocument>('POST', `/projects/${projectId}/documents`, { title, content }),
+
+    /** GET /projects/:id/documents */
+    list: (projectId: string) =>
+      request<SourceDocument[]>('GET', `/projects/${projectId}/documents`),
+  },
+
+  // ── 안건 ────────────────────────────────────────────────────────────────
+
+  agendas: {
+    /** GET /projects/:id/agendas */
+    listByProject: (projectId: string) =>
+      request<Agenda[]>('GET', `/projects/${projectId}/agendas`),
+
+    /** GET /agendas/:id */
+    get: (id: string) =>
+      request<Agenda>('GET', `/agendas/${id}`),
+
+    /** POST /agendas */
+    create: (body: CreateAgendaRequest) =>
+      request<Agenda>('POST', '/agendas', body),
+
+    /** POST /agendas/:id/reference-documents */
+    addReferenceDocs: (agendaId: string, sourceDocumentIds: string[]) =>
+      request<unknown>('POST', `/agendas/${agendaId}/reference-documents`, { sourceDocumentIds }),
+
+    /** POST /agendas/:id/draft-positions — OpenAI 호출됨 */
+    draftPositions: (agendaId: string) =>
+      request<Position[]>('POST', `/agendas/${agendaId}/draft-positions`),
+
+    /** GET /agendas/:id/positions */
+    listPositions: (agendaId: string) =>
+      request<Position[]>('GET', `/agendas/${agendaId}/positions`),
+
+    /** POST /agendas/:id/positions */
+    createPosition: (agendaId: string, body: CreatePositionRequest) =>
+      request<Position>('POST', `/agendas/${agendaId}/positions`, body),
+  },
+
+  // ── 안건 (Position) ───────────────────────────────────────────────────
+
+  positions: {
+    /** POST /positions/:id/approve */
+    approve: (id: string, body: ApprovePositionRequest) =>
+      request<Position>('POST', `/positions/${id}/approve`, body),
+
+    /** POST /positions/:id/revise */
+    revise: (id: string, body: Partial<CreatePositionRequest> & ApprovePositionRequest) =>
+      request<Position>('POST', `/positions/${id}/revise`, body),
+
+    /** POST /positions/:id/reject */
+    reject: (id: string) =>
+      request<Position>('POST', `/positions/${id}/reject`),
+
+    /** DELETE /positions/:id */
+    delete: (id: string) =>
+      request<{ success: boolean }>('DELETE', `/positions/${id}`),
+  },
+
+  // ── 미팅 ────────────────────────────────────────────────────────────────
+
+  meetings: {
+    /** POST /agendas/:id/meetings */
+    create: (agendaId: string) =>
+      request<Meeting>('POST', `/agendas/${agendaId}/meetings`),
+
+    /** GET /meetings/:id */
+    get: (id: string) =>
+      request<Meeting>('GET', `/meetings/${id}`),
+
+    /**
+     * POST /meetings/:id/start
+     * AI 에이전트를 채널에 입장시키고 Agora RTC 연결 정보를 반환.
+     *
+     * 반환값으로 Agora SDK 연결:
+     *   const info = await api.meetings.start(meetingId)
+     *   await client.join(info.agoraAppId, info.agoraChannel, info.agoraToken, null)
+     *
+     * AI 에이전트 UID = 100 (예약) — user.uid === 100 이면 AI
+     */
+    start: (id: string) =>
+      request<MeetingStartResponse>('POST', `/meetings/${id}/start`),
+
+    /** POST /meetings/:id/end */
+    end: (id: string) =>
+      request<{ success: boolean }>('POST', `/meetings/${id}/end`),
+
+    /** GET /meetings/:id/channel-info */
+    channelInfo: (id: string) =>
+      request<ChannelInfo>('GET', `/meetings/${id}/channel-info`),
+
+    /** GET /meetings/:id/meeting-logs */
+    logs: (id: string) =>
+      request<MeetingLog[]>('GET', `/meetings/${id}/meeting-logs`),
+
+    /** POST /meetings/:id/meeting-logs */
+    createLog: (id: string, transcriptId: string) =>
+      request<MeetingLog>('POST', `/meetings/${id}/meeting-logs`, { transcriptId }),
+
+    /** POST /meetings/:id/transcripts */
+    createTranscript: (id: string, body: CreateTranscriptRequest) =>
+      request<Transcript>('POST', `/meetings/${id}/transcripts`, body),
+  },
+
+  // ── 보류 항목 ──────────────────────────────────────────────────────────
+
+  holdItems: {
+    /** GET /meetings/:id/hold-items */
+    list: (meetingId: string) =>
+      request<HoldItem[]>('GET', `/meetings/${meetingId}/hold-items`),
+
+    /** POST /hold-items/:id/answer */
+    answer: (id: string, answerText: string) =>
+      request<HoldItem>('POST', `/hold-items/${id}/answer`, { answerText }),
+
+    /** POST /hold-items/:id/reopen */
+    reopen: (id: string) =>
+      request<HoldItem>('POST', `/hold-items/${id}/reopen`),
+  },
+
+  // ── 숫자 확인 팝업 ────────────────────────────────────────────────────────
+
+  numberConfirmations: {
+    /**
+     * POST /meeting-logs/:id/number-confirmation
+     * 숫자/단위 포함 답변 시 확인 팝업 트리거 (detectedValue: 감지된 숫자 문자열, e.g. "8/28")
+     */
+    create: (meetingLogId: string, detectedValue: string) =>
+      request<NumberConfirmation>('POST', `/meeting-logs/${meetingLogId}/number-confirmation`, { detectedValue }),
+
+    /**
+     * PATCH /number-confirmations/:id
+     * O/X 응답 또는 타임아웃 처리.
+     * AUTO_HOLD 선택 시 hold_item이 자동 생성됨.
+     */
+    respond: (id: string, responseType: NumberConfirmationResponseType) =>
+      request<NumberConfirmation>('PATCH', `/number-confirmations/${id}`, { responseType }),
+  },
+
+  // ── 필수 검토 ─────────────────────────────────────────────────────────────
+
+  requiredReviews: {
+    /**
+     * POST /required-reviews?meetingLogId=
+     * 사라(질문 참여자)가 특정 meeting-log를 필수검토로 지정.
+     * 재현이 PATCH로 확인해야 확정 상태로 전환됨.
+     */
+    create: (meetingLogId: string) =>
+      request<RequiredReview>('POST', `/required-reviews?meetingLogId=${meetingLogId}`),
+
+    /** PATCH /required-reviews/:id — 재현(답변 작성자)이 확인 처리 → status: "CONFIRMED" */
+    confirm: (id: string) =>
+      request<RequiredReview>('PATCH', `/required-reviews/${id}`),
+  },
+
+  // ── 사후 검토 ─────────────────────────────────────────────────────────────
+
+  reviewActions: {
+    /**
+     * POST /meeting-logs/:id/review-actions
+     * 재현이 사후검토 화면에서 각 meeting-log에 대해 처리.
+     * RE_HELD 선택 시 hold_item이 자동 생성됨.
+     */
+    create: (meetingLogId: string, action: ReviewAction, note?: string) =>
+      request<ReviewActionResult>('POST', `/meeting-logs/${meetingLogId}/review-actions`, { action, note }),
+  },
+
+  // ── 협의 조율 기록 ────────────────────────────────────────────────────────
+
+  coordinationRecords: {
+    /**
+     * POST /coordination-records?meetingId=
+     * 승인 범위 내 대안 조율 결과 저장.
+     * OUT_OF_RANGE 선택 시 hold_item이 자동 생성됨.
+     */
+    create: (
+      meetingId: string,
+      body: { positionId: string; proposedContent: string; result: CoordinationResult; nextAction?: string }
+    ) =>
+      request<CoordinationRecord>('POST', `/coordination-records?meetingId=${meetingId}`, body),
+  },
+
+  // ── 알림 ────────────────────────────────────────────────────────────────
+
+  notifications: {
+    /** GET /notifications */
+    list: () =>
+      request<Notification[]>('GET', '/notifications'),
+
+    /** PATCH /notifications/:id/read */
+    read: (id: string) =>
+      request<Notification>('PATCH', `/notifications/${id}/read`),
+
+    /** PATCH /notifications/read-all */
+    readAll: () =>
+      request<{ updatedCount: number }>('PATCH', '/notifications/read-all'),
+  },
+}
