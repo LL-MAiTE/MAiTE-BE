@@ -44,12 +44,14 @@ export interface Project {
   createdAt: string
 }
 
+export type ProjectMemberRole = 'ANSWERER' | 'QUESTIONER' | 'TEAM_MANAGER'
+
 export interface ProjectMember {
   id: string
   userId: string
   userName: string
   userEmail: string
-  role: 'TEAM_MANAGER' | 'MEMBER'
+  role: ProjectMemberRole
 }
 
 // ── 문서 ──────────────────────────────────────────────────────────────────
@@ -57,10 +59,32 @@ export interface ProjectMember {
 export interface SourceDocument {
   id: string
   projectId: string
+  connectionId: string | null
   title: string
-  content: string
+  path: string | null
+  sourceUrl: string | null
   isCoreContext: boolean
   lastModifiedAt: string
+  syncedAt: string | null
+}
+
+// ── 문서 연동 (Notion/Git) ───────────────────────────────────────────────
+
+/** GIT은 실제 동기화 구현됨. NOTION은 아직 stub (연동 등록만 되고 문서를 가져오지는 않음) */
+export type ConnectionType = 'NOTION' | 'GIT'
+
+export interface SourceConnection {
+  id: string
+  type: ConnectionType
+  /** GIT일 때 "owner/repo" 형식 */
+  workspaceOrRepoName: string
+  connectedBy: string
+  connectedAt: string
+}
+
+export interface SyncResponse {
+  syncedCount: number
+  latestFiles: string[]
 }
 
 // ── 안건 (Agenda / Position) ───────────────────────────────────────────────
