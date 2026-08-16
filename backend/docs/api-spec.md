@@ -14,6 +14,14 @@
 
 ---
 
+## 사용자
+
+| 구현 | Method | Path | 설명 | Request Body | Response Body |
+|------|--------|------|------|-------------|---------------|
+| ✅ | GET | `/users?email=` | 이메일로 사용자 검색 (멤버 초대 시 userId 조회용) | - | `{ id, email, name }` |
+
+---
+
 ## 프로젝트 / 멤버
 
 | 구현 | Method | Path | 설명 | Request Body | Response Body |
@@ -21,7 +29,8 @@
 | ✅ | POST | `/projects` | 프로젝트 생성 (생성자는 자동으로 TEAM_MANAGER) | `{ name }` | `{ id, name, createdAt }` |
 | ✅ | GET | `/projects` | 내가 속한 프로젝트 목록 | - | `project[]` |
 | ✅ | GET | `/projects/:id` | 프로젝트 단건 조회 | - | `{ id, name, createdAt }` |
-| ✅ | POST | `/projects/:id/members` | 멤버 초대 및 역할 부여 | `{ userId, role }` | `{ id, userId, userName, userEmail, role }` |
+| ✅ | POST | `/projects/:id/members` | 멤버 초대 및 역할 부여 (`role`: ANSWERER/QUESTIONER/TEAM_MANAGER) | `{ userId, role }` | `{ id, userId, userName, userEmail, role }` |
+| ✅ | GET | `/projects/:id/members` | 프로젝트 멤버 목록 조회 | - | `projectMember[]` |
 
 ---
 
@@ -29,11 +38,11 @@
 
 | 구현 | Method | Path | 설명 | Request Body | Response Body |
 |------|--------|------|------|-------------|---------------|
-| ✅ | POST | `/projects/:id/connections` | Notion/Git 연동 등록 | `{ type, workspaceOrRepoName, accessToken }` | `{ id, type, workspaceOrRepoName, connectedBy, connectedAt }` |
-| ✅ | POST | `/connections/:id/sync` | 연동 소스에서 문서 동기화 (stub) | - | `{ syncedCount, latestFiles: string[] }` |
+| ✅ | POST | `/projects/:id/connections` | Notion/Git 연동 등록 (`type`: NOTION/GIT) | `{ type, workspaceOrRepoName, accessToken }` | `{ id, type, workspaceOrRepoName, connectedBy, connectedAt }` |
+| ✅ | POST | `/connections/:id/sync` | 연동 소스에서 문서 동기화. **GIT은 실제 GitHub API로 동작** (기본 브랜치의 .md/.mdx/.txt/.rst 파일, 최대 30개). **NOTION은 아직 stub** | - | `{ syncedCount, latestFiles: string[] }` |
 | ✅ | POST | `/projects/:id/documents` | md 파일 직접 업로드 | `{ title, content }` | `{ id, projectId, title, isCoreContext, lastModifiedAt, ... }` |
 | ✅ | PATCH | `/documents/:id` | 핵심 맥락 md 지정 등 문서 속성 수정 | `{ isCoreContext }` | `{ id, projectId, title, isCoreContext, ... }` |
-| ✅ | GET | `/projects/:id/documents` | 프로젝트 문서 목록 (핵심맥락 우선 정렬) | - | `sourceDocument[]` |
+| ✅ | GET | `/projects/:id/documents` | 프로젝트 문서 목록 (핵심맥락 우선 정렬). **content(본문)는 포함되지 않음** — 필요 시 단건 조회 API 추가 필요 | - | `sourceDocument[]` |
 
 ---
 
@@ -198,7 +207,8 @@ client.on('stream-message', (uid, data) => {
 
 | 항목 | 설명 |
 |------|------|
-| 발화 의미 매칭 | 현재 키워드 매칭 stub — 임베딩 기반 유사도 매칭으로 교체 필요 |
-| Notion/Git 실제 동기화 | 현재 stub — 실제 API 연동 필요 |
+| 발화 의미 매칭 | OpenAI 호출로 매칭, 실패 시 키워드 매칭으로 fallback |
+| Notion 실제 동기화 | 현재 stub — 연동 등록만 되고 문서를 가져오지 않음 (Git은 구현 완료) |
+| 문서 단건 조회(content 포함) | 목록 API는 content 미포함 — 필요 시 단건 조회 API 추가 필요 |
 | 24~48h 타임아웃 자동확정 | `PATCH /hold-items/:id` 호출하는 스케줄러 별도 구현 필요 |
 | LLM 응답 실패 처리 | Agora ConvAI → OpenAI LLM 호출 실패 시 failure_message 출력 — 원인 미확정 (rate limit 의심) |

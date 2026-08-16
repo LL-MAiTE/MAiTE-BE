@@ -20,7 +20,11 @@ import type {
   User,
   Project,
   ProjectMember,
+  ProjectMemberRole,
   SourceDocument,
+  ConnectionType,
+  SourceConnection,
+  SyncResponse,
   Agenda,
   CreateAgendaRequest,
   Position,
@@ -123,7 +127,7 @@ export const api = {
       request<ProjectMember[]>('GET', `/projects/${projectId}/members`),
 
     /** POST /projects/:id/members */
-    addMember: (projectId: string, userId: string, role: 'TEAM_MANAGER' | 'MEMBER') =>
+    addMember: (projectId: string, userId: string, role: ProjectMemberRole) =>
       request<ProjectMember>('POST', `/projects/${projectId}/members`, { userId, role }),
   },
 
@@ -134,9 +138,29 @@ export const api = {
     upload: (projectId: string, title: string, content: string) =>
       request<SourceDocument>('POST', `/projects/${projectId}/documents`, { title, content }),
 
-    /** GET /projects/:id/documents */
+    /** GET /projects/:id/documents — 목록만 반환, content(본문)는 포함되지 않음 */
     list: (projectId: string) =>
       request<SourceDocument[]>('GET', `/projects/${projectId}/documents`),
+
+    /** PATCH /documents/:id — 핵심 맥락 문서 지정 등 */
+    update: (documentId: string, isCoreContext: boolean) =>
+      request<SourceDocument>('PATCH', `/documents/${documentId}`, { isCoreContext }),
+  },
+
+  // ── 문서 연동 (Notion/Git) ─────────────────────────────────────────────
+
+  connections: {
+    /** POST /projects/:id/connections — Notion/Git 연동 등록 */
+    create: (projectId: string, type: ConnectionType, workspaceOrRepoName: string, accessToken: string) =>
+      request<SourceConnection>('POST', `/projects/${projectId}/connections`, {
+        type,
+        workspaceOrRepoName,
+        accessToken,
+      }),
+
+    /** POST /connections/:id/sync — GIT: 실제 저장소에서 문서(.md/.mdx/.txt/.rst) 동기화. NOTION: 아직 미구현(stub) */
+    sync: (connectionId: string) =>
+      request<SyncResponse>('POST', `/connections/${connectionId}/sync`),
   },
 
   // ── 안건 ────────────────────────────────────────────────────────────────
