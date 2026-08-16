@@ -79,6 +79,15 @@ public class ProjectService {
         return ProjectMemberResponse.from(member);
     }
 
+    @Transactional(readOnly = true)
+    public List<ProjectMemberResponse> getMembers(UUID projectId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Project project = getProjectAndVerifyMember(projectId, userId);
+        return projectMemberRepository.findAllByProject(project).stream()
+                .map(ProjectMemberResponse::from)
+                .toList();
+    }
+
     public Project getProjectAndVerifyMember(UUID projectId, UUID userId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_NOT_FOUND));

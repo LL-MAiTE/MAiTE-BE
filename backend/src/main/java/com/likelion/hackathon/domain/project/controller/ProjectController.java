@@ -41,4 +41,9 @@ public class ProjectController {
             @RequestBody @Valid InviteMemberRequest request) {
         return ApiResponse.ok(projectService.inviteMember(id, request));
     }
+
+    @GetMapping("/{id}/members")
+    public ApiResponse<List<ProjectMemberResponse>> getMembers(@PathVariable UUID id) {
+        return ApiResponse.ok(projectService.getMembers(id));
+    }
 }
