@@ -180,6 +180,23 @@ export interface ChannelInfo {
   token: string
 }
 
+// ── 미팅 안건 스냅샷 ──────────────────────────────────────────────────────
+
+export interface MeetingPosition {
+  id: string
+  positionId: string
+  topic: string
+  questionText: string
+  answer: string
+  preference: string
+  concessionRange: string
+  dealbreaker: string
+  priority: number
+  scheduleConstraint?: string
+  snappedVersion: number
+  snappedAt: string
+}
+
 // ── 전사 / 미팅 로그 ──────────────────────────────────────────────────────
 
 export interface Transcript {

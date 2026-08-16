@@ -51,6 +51,11 @@ public class MeetingController {
         return ApiResponse.ok(meetingService.createMeetingLog(id, request));
     }
 
+    @GetMapping("/meetings/{id}/positions")
+    public ApiResponse<List<MeetingPositionResponse>> getMeetingPositions(@PathVariable UUID id) {
+        return ApiResponse.ok(meetingService.getMeetingPositions(id));
+    }
+
     @GetMapping("/meetings/{id}/meeting-logs")
     public ApiResponse<List<MeetingLogResponse>> getMeetingLogs(@PathVariable UUID id) {
         return ApiResponse.ok(meetingService.getMeetingLogs(id));

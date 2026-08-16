@@ -226,6 +226,14 @@ public class MeetingService {
     }
 
     @Transactional(readOnly = true)
+    public List<MeetingPositionResponse> getMeetingPositions(UUID meetingId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Meeting meeting = getMeetingAndVerify(meetingId, userId);
+        return meetingPositionRepository.findAllByMeeting(meeting)
+                .stream().map(MeetingPositionResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<MeetingLogResponse> getMeetingLogs(UUID meetingId) {
         UUID userId = SecurityUtil.getCurrentUserId();
         Meeting meeting = getMeetingAndVerify(meetingId, userId);

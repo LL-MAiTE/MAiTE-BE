@@ -32,6 +32,7 @@ import type {
   ApprovePositionRequest,
   Meeting,
   MeetingStartResponse,
+  MeetingPosition,
   ChannelInfo,
   MeetingLog,
   Transcript,
@@ -246,6 +247,13 @@ export const api = {
     /** GET /meetings/:id/channel-info */
     channelInfo: (id: string) =>
       request<ChannelInfo>('GET', `/meetings/${id}/channel-info`),
+
+    /**
+     * GET /meetings/:id/positions
+     * 미팅 시작 시 스냅샷된 승인 안건 목록 — AI 매칭 및 화면 표시용
+     */
+    positions: (id: string) =>
+      request<MeetingPosition[]>('GET', `/meetings/${id}/positions`),
 
     /** GET /meetings/:id/meeting-logs */
     logs: (id: string) =>
