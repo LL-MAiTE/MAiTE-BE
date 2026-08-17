@@ -3,6 +3,7 @@ package com.likelion.hackathon.domain.document.entity;
 import com.likelion.hackathon.domain.document.entity.enums.ConnectionType;
 import com.likelion.hackathon.domain.project.entity.Project;
 import com.likelion.hackathon.domain.user.entity.User;
+import com.likelion.hackathon.global.crypto.TokenEncryptionConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -31,8 +32,11 @@ public class SourceConnection {
 
     private String workspaceOrRepoName;
 
-    @Column(nullable = false)
-    private String accessToken; // 암호화 저장
+    // AES-256-GCM으로 암호화되어 저장됨 (TokenEncryptionConverter). 애플리케이션 코드에서는
+    // 평문 문자열처럼 그대로 다루면 되고, 암/복호화는 JPA가 읽기/쓰기 시 자동으로 처리한다.
+    @Convert(converter = TokenEncryptionConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String accessToken;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "connected_by", nullable = false)
