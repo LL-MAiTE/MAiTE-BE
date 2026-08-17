@@ -39,8 +39,10 @@ public class MeetingPosition {
     @Column(columnDefinition = "TEXT")
     private String agreedValue;
 
+    // columnDefinition의 DEFAULT는 기존 행이 있는 테이블에도 NOT NULL 컬럼을
+    // 안전하게 추가하기 위함 (ddl-auto: update가 기존 row에 값을 채워줌)
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'NOT_DISCUSSED'")
     @Builder.Default
     private MeetingPositionResultStatus resultStatus = MeetingPositionResultStatus.NOT_DISCUSSED;
 
