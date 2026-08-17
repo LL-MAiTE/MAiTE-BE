@@ -182,6 +182,21 @@ export interface ChannelInfo {
 
 // ── 미팅 안건 스냅샷 ──────────────────────────────────────────────────────
 
+/**
+ * NOT_DISCUSSED: 회의에서 언급 안 됨
+ * AGREED: 승인된 양보 범위(concessionRange) 내에서 합의됨
+ * OUT_OF_RANGE_AGREED: 딜브레이커를 벗어나 합의됨 — 사람 확인 필요
+ * NOT_AGREED: 논의는 됐으나 결론 없음
+ *
+ * ⚠️ OpenAI 판단 결과라 가끔 부정확함(예: 범위 내 값인데 OUT_OF_RANGE_AGREED로 오판).
+ *    화면엔 참고용으로 노출하되 최종 확정은 사람이 하는 걸 전제로 설계됨.
+ */
+export type MeetingPositionResultStatus =
+  | 'NOT_DISCUSSED'
+  | 'AGREED'
+  | 'OUT_OF_RANGE_AGREED'
+  | 'NOT_AGREED'
+
 export interface MeetingPosition {
   id: string
   positionId: string
@@ -195,6 +210,11 @@ export interface MeetingPosition {
   scheduleConstraint?: string
   snappedVersion: number
   snappedAt: string
+  /** 회의 종료(POST /meetings/:id/end) 시 대화 전체를 분석해 채워짐 */
+  resultStatus: MeetingPositionResultStatus
+  /** 사람이 읽을 합의 결과 요약, 예: "8월 17일까지 납품하기로 합의". 없으면 null */
+  agreedValue: string | null
+  resolvedAt: string | null
 }
 
 // ── 전사 / 미팅 로그 ──────────────────────────────────────────────────────

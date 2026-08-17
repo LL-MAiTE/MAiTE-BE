@@ -240,7 +240,11 @@ export const api = {
     start: (id: string) =>
       request<MeetingStartResponse>('POST', `/meetings/${id}/start`),
 
-    /** POST /meetings/:id/end */
+    /**
+     * POST /meetings/:id/end
+     * 음성 세션 종료 + AI 에이전트 퇴장 + 전체 대화를 분석해 안건별 합의 결과 저장.
+     * 이후 meetings.positions()를 다시 호출하면 resultStatus/agreedValue가 채워져 있음.
+     */
     end: (id: string) =>
       request<{ success: boolean }>('POST', `/meetings/${id}/end`),
 
@@ -250,7 +254,8 @@ export const api = {
 
     /**
      * GET /meetings/:id/positions
-     * 미팅 시작 시 스냅샷된 승인 안건 목록 — AI 매칭 및 화면 표시용
+     * 미팅 시작 시 스냅샷된 승인 안건 목록. 회의 종료 후엔 각 항목의
+     * resultStatus('AGREED' 등)/agreedValue로 실제 합의 결과도 함께 내려옴.
      */
     positions: (id: string) =>
       request<MeetingPosition[]>('GET', `/meetings/${id}/positions`),
