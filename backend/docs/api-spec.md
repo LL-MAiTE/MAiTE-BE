@@ -72,9 +72,9 @@
 | ✅ | POST | `/agendas/:id/meetings` | 미팅 세션 생성 (승인 안건 스냅샷 → meeting_positions 기록) | - | `{ id, agendaId, status: "IN_PROGRESS", ... }` |
 | ✅ | GET | `/meetings/:id` | 미팅 단건 조회 | - | `{ id, agendaId, status, startedAt, disclosureCompletedAt, agoraAgentId, ... }` |
 | ✅ | GET | `/meetings/:id/channel-info` | Agora 채널 정보 조회 (프론트가 채널 입장 전 호출) | - | `{ appId, channelName, token }` |
-| ✅ | GET | `/meetings/:id/positions` | 미팅 시작 시 스냅샷된 승인 안건 목록 조회 (AI 매칭 / 화면 표시용) | - | `meetingPosition[]` |
+| ✅ | GET | `/meetings/:id/positions` | 미팅 시작 시 스냅샷된 승인 안건 목록 조회. 회의 종료 후엔 `resultStatus`/`agreedValue`로 실제 합의 결과도 함께 내려옴 (AI 매칭 / 화면 표시용) | - | `meetingPosition[]` |
 | ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraToken, agoraAgentUid: 100 }` |
-| ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 | - | `{ success: true }` |
+| ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 + **전체 대화를 안건 목록과 함께 OpenAI로 분석해 안건별 합의 결과(`meeting_positions.resultStatus`/`agreedValue`) 저장** | - | `{ success: true }` |
 | ✅ | POST | `/meetings/:id/transcripts` | 수동 전사 텍스트 저장 (테스트·보완용) | `{ speakerLabel, language, text, spokenAt, confidence }` | `{ id, meetingId, speakerLabel, language, text, spokenAt, confidence }` |
 | ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록 | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, status: "DELIVERED"/"ON_HOLD" }` |
 | ✅ | GET | `/meetings/:id/meeting-logs` | 미팅 로그 조회 (사후검토용) | - | `meetingLog[]` |

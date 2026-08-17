@@ -1,6 +1,7 @@
 package com.likelion.hackathon.domain.meeting.dto;
 
 import com.likelion.hackathon.domain.meeting.entity.MeetingPosition;
+import com.likelion.hackathon.domain.meeting.entity.enums.MeetingPositionResultStatus;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -17,7 +18,11 @@ public record MeetingPositionResponse(
         Integer priority,
         String scheduleConstraint,
         int snappedVersion,
-        LocalDateTime snappedAt
+        LocalDateTime snappedAt,
+        // 회의 종료 시 대화 분석으로 채워짐 (그 전엔 NOT_DISCUSSED / null)
+        MeetingPositionResultStatus resultStatus,
+        String agreedValue,
+        LocalDateTime resolvedAt
 ) {
     public static MeetingPositionResponse from(MeetingPosition mp) {
         var p = mp.getPosition();
@@ -33,7 +38,10 @@ public record MeetingPositionResponse(
                 p.getPriority(),
                 p.getScheduleConstraint(),
                 mp.getVersion(),
-                mp.getSnappedAt()
+                mp.getSnappedAt(),
+                mp.getResultStatus(),
+                mp.getAgreedValue(),
+                mp.getResolvedAt()
         );
     }
 }

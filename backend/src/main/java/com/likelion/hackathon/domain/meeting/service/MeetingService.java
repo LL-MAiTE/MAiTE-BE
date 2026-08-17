@@ -12,6 +12,7 @@ import com.likelion.hackathon.domain.hold.entity.enums.HoldItemOrigin;
 import com.likelion.hackathon.domain.hold.repository.HoldItemRepository;
 import com.likelion.hackathon.domain.meeting.dto.*;
 import com.likelion.hackathon.domain.meeting.entity.*;
+import com.likelion.hackathon.domain.meeting.entity.enums.MeetingPositionResultStatus;
 import com.likelion.hackathon.domain.meeting.repository.*;
 import com.likelion.hackathon.domain.notification.entity.Notification;
 import com.likelion.hackathon.domain.notification.entity.enums.NotificationType;
@@ -147,6 +148,43 @@ public class MeetingService {
         // AI 에이전트 종료
         if (meeting.getAgoraAgentId() != null) {
             agoraService.stopConversationalAI(meeting.getAgoraAgentId());
+        }
+
+        extractAndSaveAgreements(meeting);
+    }
+
+    // 회의 전체 대화를 안건 목록과 함께 한 번에 분석해 안건별 합의 결과를 저장
+    private void extractAndSaveAgreements(Meeting meeting) {
+        List<MeetingPosition> meetingPositions = meetingPositionRepository.findAllByMeeting(meeting);
+        if (meetingPositions.isEmpty()) return;
+
+        List<Transcript> transcripts = transcriptRepository.findAllByMeetingOrderBySpokenAt(meeting);
+        if (transcripts.isEmpty()) return;
+
+        List<OpenAiService.AgreedOutcome> outcomes;
+        try {
+            outcomes = openAiService.extractAgreedOutcomes(meetingPositions, transcripts);
+        } catch (Exception e) {
+            log.error("Failed to extract agreed outcomes for meeting {}: {}", meeting.getId(), e.getMessage());
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (OpenAiService.AgreedOutcome outcome : outcomes) {
+            if (outcome.topic() == null) continue;
+            meetingPositions.stream()
+                    .filter(mp -> mp.getPosition().getTopic().equals(outcome.topic()))
+                    .findFirst()
+                    .ifPresent(mp -> mp.recordResult(parseResultStatus(outcome.status()), outcome.agreedValue(), now));
+        }
+    }
+
+    private MeetingPositionResultStatus parseResultStatus(String status) {
+        if (status == null) return MeetingPositionResultStatus.NOT_DISCUSSED;
+        try {
+            return MeetingPositionResultStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            return MeetingPositionResultStatus.NOT_DISCUSSED;
         }
     }
 
