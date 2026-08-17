@@ -7,6 +7,8 @@ import com.likelion.hackathon.domain.agenda.entity.enums.ApprovalStatus;
 import com.likelion.hackathon.domain.agenda.repository.AgendaReferenceDocumentRepository;
 import com.likelion.hackathon.domain.agenda.repository.AgendaRepository;
 import com.likelion.hackathon.domain.agenda.repository.PositionRepository;
+import com.likelion.hackathon.domain.confirmation.entity.NumberConfirmation;
+import com.likelion.hackathon.domain.confirmation.repository.NumberConfirmationRepository;
 import com.likelion.hackathon.domain.hold.entity.HoldItem;
 import com.likelion.hackathon.domain.hold.entity.enums.HoldItemOrigin;
 import com.likelion.hackathon.domain.hold.repository.HoldItemRepository;
@@ -38,11 +40,22 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MeetingService {
+
+    // 계약/가격/일정/수량 등 "핵심 수치" 감지용. 매 숫자마다가 아니라
+    // 통화/퍼센트/날짜/단위가 붙은 값만 걸러서 미팅 흐름 방해를 최소화한다.
+    private static final Pattern CRITICAL_NUMBER_PATTERN = Pattern.compile(
+            "\\d[\\d,]*\\s*(?:원|달러|USD|\\$|만원|천원|억원|%|개|명|박스|톤|kg|대|건)"
+                    + "|\\d{1,2}\\s*월\\s*\\d{1,2}\\s*일"
+                    + "|\\d{4}-\\d{2}-\\d{2}"
+                    + "|\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?"
+    );
 
     private final MeetingRepository meetingRepository;
     private final MeetingPositionRepository meetingPositionRepository;
@@ -53,6 +66,7 @@ public class MeetingService {
     private final AgendaReferenceDocumentRepository refDocRepository;
     private final HoldItemRepository holdItemRepository;
     private final NotificationRepository notificationRepository;
+    private final NumberConfirmationRepository numberConfirmationRepository;
     private final ProjectService projectService;
     private final AgoraService agoraService;
     private final AgoraProperties agoraProperties;
@@ -242,6 +256,9 @@ public class MeetingService {
                     .translatedText(matched.getPosition().getAnswer())
                     .build();
             log.deliver();
+            meetingLogRepository.save(log);
+            detectAndFlagCriticalNumber(log, log.getTranslatedText());
+            return MeetingLogResponse.from(log);
         } else {
             log = MeetingLog.builder()
                     .meeting(meeting)
@@ -256,9 +273,8 @@ public class MeetingService {
                     .referenceId(log.getId())
                     .referenceType("meeting_log")
                     .build());
+            return MeetingLogResponse.from(log);
         }
-        meetingLogRepository.save(log);
-        return MeetingLogResponse.from(log);
     }
 
     @Transactional(readOnly = true)
@@ -333,7 +349,25 @@ public class MeetingService {
                     .build();
             agentLog.deliver();
             meetingLogRepository.save(agentLog);
+            detectAndFlagCriticalNumber(agentLog, agentText);
         }
+    }
+
+    // 전달된 답변에 계약/가격/일정/수량 등 핵심 수치가 있으면
+    // NumberConfirmation을 자동 생성해 확인 팝업 트리거 대상으로 표시한다.
+    private void detectAndFlagCriticalNumber(MeetingLog log, String deliveredText) {
+        if (deliveredText == null || deliveredText.isBlank()) return;
+
+        Matcher matcher = CRITICAL_NUMBER_PATTERN.matcher(deliveredText);
+        if (!matcher.find()) return;
+
+        log.markContainsCriticalNumber();
+
+        numberConfirmationRepository.save(NumberConfirmation.builder()
+                .meetingLog(log)
+                .detectedValue(matcher.group().trim())
+                .popupShownAt(LocalDateTime.now())
+                .build());
     }
 
     private MeetingPosition findBestMatch(String text, List<MeetingPosition> positions) {

@@ -293,8 +293,17 @@ export const api = {
 
   numberConfirmations: {
     /**
+     * GET /meeting-logs/:id/number-confirmation
+     * 답변이 전달될 때(미팅 로그 생성 / 실시간 AI 응답 저장) 금액·날짜·수량·퍼센트 등
+     * 핵심 수치가 감지되면 서버가 자동으로 생성해둔 숫자확인을 조회. 없으면 404.
+     * 프론트는 meetingLog.containsCriticalNumber === true일 때 이걸 불러서 팝업 표시.
+     */
+    get: (meetingLogId: string) =>
+      request<NumberConfirmation>('GET', `/meeting-logs/${meetingLogId}/number-confirmation`),
+
+    /**
      * POST /meeting-logs/:id/number-confirmation
-     * 숫자/단위 포함 답변 시 확인 팝업 트리거 (detectedValue: 감지된 숫자 문자열, e.g. "8/28")
+     * 숫자/단위 포함 답변 시 확인 팝업 수동 트리거 (테스트·보완용, 실제로는 자동 생성됨)
      */
     create: (meetingLogId: string, detectedValue: string) =>
       request<NumberConfirmation>('POST', `/meeting-logs/${meetingLogId}/number-confirmation`, { detectedValue }),

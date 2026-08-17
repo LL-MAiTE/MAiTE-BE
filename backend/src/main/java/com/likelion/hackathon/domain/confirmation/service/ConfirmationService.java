@@ -29,6 +29,19 @@ public class ConfirmationService {
     private final HoldItemRepository holdItemRepository;
     private final ProjectService projectService;
 
+    @Transactional(readOnly = true)
+    public NumberConfirmationResponse getConfirmation(UUID meetingLogId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        MeetingLog log = meetingLogRepository.findById(meetingLogId)
+                .orElseThrow(() -> new CustomException(ErrorCode.MEETING_LOG_NOT_FOUND));
+        projectService.getProjectAndVerifyMember(
+                log.getMeeting().getAgenda().getProject().getId(), userId);
+
+        NumberConfirmation confirmation = confirmationRepository.findByMeetingLog(log)
+                .orElseThrow(() -> new CustomException(ErrorCode.NUMBER_CONFIRMATION_NOT_FOUND));
+        return NumberConfirmationResponse.from(confirmation);
+    }
+
     @Transactional
     public NumberConfirmationResponse createConfirmation(UUID meetingLogId, CreateNumberConfirmationRequest request) {
         UUID userId = SecurityUtil.getCurrentUserId();
