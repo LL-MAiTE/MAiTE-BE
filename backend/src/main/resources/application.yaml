@@ -26,5 +26,6 @@ agora:
   customer-key: ${AGORA_CUSTOMER_KEY}
   customer-secret: ${AGORA_CUSTOMER_SECRET}
   callback-url: ${AGORA_CALLBACK_URL:}
-  llm-addon: ${AGORA_LLM_ADDON:openai-llm}
-  tts-addon: ${AGORA_TTS_ADDON:openai-tts}
+  agent-pipeline-id: ${AGORA_AGENT_PIPELINE_ID:}
+  asr-resource-id: ${AGORA_ASR_RESOURCE_ID}
+  tts-resource-id: ${AGORA_TTS_RESOURCE_ID}

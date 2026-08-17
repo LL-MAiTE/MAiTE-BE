@@ -105,14 +105,12 @@ public class MeetingService {
                         agenda, List.of(ApprovalStatus.APPROVED, ApprovalStatus.REVISED_APPROVED));
         List<AgendaReferenceDocument> refDocs = refDocRepository.findAllByAgendaAndExcludedFalse(agenda);
 
-        // 시스템 프롬프트 생성
-        String systemPrompt = promptBuilder.build(agenda, positions, refDocs);
         String greeting = promptBuilder.buildGreeting(agenda);
 
         // Agora Conversational AI 에이전트 시작
         try {
             String agentId = agoraService.startConversationalAI(
-                    meetingId.toString(), systemPrompt, "ko-KR", greeting);
+                    meetingId.toString(), greeting);
             meeting.setAgoraAgentId(agentId);
             log.info("Meeting {} AI agent started: {}", meetingId, agentId);
         } catch (Exception e) {
@@ -136,7 +134,7 @@ public class MeetingService {
         result.put("agoraAppId", agoraProperties.getAppId());
         result.put("agoraChannel", meetingId.toString());
         result.put("agoraToken", rtcToken);
-        result.put("agoraAgentUid", 100);
+        result.put("agoraAgentUid", 9999);
         return result;
     }
 

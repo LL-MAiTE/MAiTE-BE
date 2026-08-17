@@ -3,7 +3,6 @@ package com.likelion.hackathon.global.agora;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -17,23 +16,21 @@ import java.util.*;
 public class AgoraService {
 
     private static final String CONV_AI_BASE = "https://api.agora.io/api/conversational-ai-agent/v2/projects/%s/join";
-    private static final int AGENT_UID = 100;
+    private static final int AGENT_UID = 9999;
 
     private final AgoraProperties props;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${openai.api-key:}")
-    private String openAiKey;
-
     /**
-     * Agora Conversational AI 에이전트를 생성하고 채널에 입장시킴.
-     * Model Credentials(addon)에 등록된 LLM/TTS 이름을 참조.
+     * Agora Conversational AI 에이전트를 채널에 입장시킴.
+     * LLM은 우리 Custom LLM 엔드포인트(/agora/chat-completions)로 교체되어 있음.
+     * ASR: Deepgram(Agora Managed Key), TTS: MiniMax(Agora Managed Key).
+     *
      * @return agentId (나중에 종료할 때 사용)
      */
     @SuppressWarnings("unchecked")
-    public String startConversationalAI(String channelName, String systemPrompt,
-                                        String language, String greetingMessage) {
+    public String startConversationalAI(String channelName, String greetingMessage) {
         String url = String.format(CONV_AI_BASE, props.getAppId());
 
         String agentToken = "";
@@ -47,31 +44,42 @@ public class AgoraService {
             }
         }
 
+        // LLM: Custom LLM — Agora가 우리 서버를 OpenAI 호환 API로 호출
+        String callbackBase = props.getCallbackUrl() != null ? props.getCallbackUrl().replaceAll("/$", "") : "";
         Map<String, Object> llm = new LinkedHashMap<>();
-        if (openAiKey != null && !openAiKey.isBlank()) {
-            llm.put("url", "https://api.openai.com/v1/chat/completions");
-            llm.put("api_key", openAiKey);
-            llm.put("model", "gpt-4o-mini");
-        } else {
-            llm.put("addon", props.getLlmAddon());
-        }
-        llm.put("system_message", systemPrompt);
+        llm.put("url", callbackBase + "/agora/chat-completions?meetingId=" + channelName);
         llm.put("greeting_message", greetingMessage);
-        llm.put("failure_message", "잠시 후 다시 말씀해 주세요.");
-        llm.put("max_history", 10);
+        llm.put("failure_message", "확인하는 데 시간이 조금 걸리고 있습니다. 잠시만 기다려주세요.");
 
-        // TTS: OpenAI TTS when key available, otherwise addon
+        // ASR: Deepgram (Agora Managed Key)
+        Map<String, Object> asrParams = new LinkedHashMap<>();
+        asrParams.put("url", "wss://api.deepgram.com/v1/listen");
+        asrParams.put("model", "nova-3");
+        asrParams.put("keyterm", "");
+        asrParams.put("language", "ko");
+
+        Map<String, Object> asr = new LinkedHashMap<>();
+        asr.put("vendor", "deepgram");
+        asr.put("credential_mode", "managed");
+        asr.put("resource_id", props.getAsrResourceId());
+        asr.put("language", "en");  // Agora 최상위 언어 필드
+        asr.put("params", asrParams);
+        asr.put("model", "nova-3");
+
+        // TTS: MiniMax (Agora Managed Key)
+        Map<String, Object> voiceSetting = new LinkedHashMap<>();
+        voiceSetting.put("voice_id", "English_radiant_girl");
+
+        Map<String, Object> ttsParams = new LinkedHashMap<>();
+        ttsParams.put("url", "wss://api.minimax.io/ws/v1/t2a_v2");
+        ttsParams.put("model", "speech-2.8-turbo");
+        ttsParams.put("voice_setting", voiceSetting);
+
         Map<String, Object> tts = new LinkedHashMap<>();
-        if (openAiKey != null && !openAiKey.isBlank()) {
-            Map<String, Object> ttsParams = new LinkedHashMap<>();
-            ttsParams.put("api_key", openAiKey);
-            ttsParams.put("model", "tts-1");
-            ttsParams.put("voice", "nova");
-            tts.put("vendor", "openai");
-            tts.put("params", ttsParams);
-        } else {
-            tts.put("addon", props.getTtsAddon());
-        }
+        tts.put("vendor", "minimax");
+        tts.put("credential_mode", "managed");
+        tts.put("resource_id", props.getTtsResourceId());
+        tts.put("params", ttsParams);
 
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("channel", channelName);
@@ -79,19 +87,19 @@ public class AgoraService {
         properties.put("agent_rtc_uid", String.valueOf(AGENT_UID));
         properties.put("remote_rtc_uids", List.of("*"));
         properties.put("idle_timeout", 60);
+        properties.put("asr", asr);
         properties.put("llm", llm);
         properties.put("tts", tts);
 
         if (props.getCallbackUrl() != null && !props.getCallbackUrl().isBlank()) {
             properties.put("message_subscriber", Map.of(
-                    "url", props.getCallbackUrl() + "/agora/callback"
+                    "url", callbackBase + "/agora/callback"
             ));
         }
 
-        Map<String, Object> requestBody = Map.of(
-                "name", "agent-" + channelName,
-                "properties", properties
-        );
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("name", "agent-" + channelName);
+        requestBody.put("properties", properties);
 
         try {
             log.info("Agora ConvAI request: {}", objectMapper.writeValueAsString(requestBody));
@@ -112,9 +120,11 @@ public class AgoraService {
     public void stopConversationalAI(String agentId) {
         if (agentId == null || agentId.isBlank()) return;
         try {
-            String url = String.format("https://api.agora.io/api/conversational-ai-agent/v2/projects/%s/agents/%s/leave",
+            String url = String.format(
+                    "https://api.agora.io/api/conversational-ai-agent/v2/projects/%s/agents/%s/leave",
                     props.getAppId(), agentId);
-            restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(basicAuthHeaders()), Void.class);
+            // Agora leave는 POST (DELETE 아님)
+            restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(basicAuthHeaders()), Void.class);
             log.info("Agora AI agent stopped: agentId={}", agentId);
         } catch (Exception e) {
             log.warn("Failed to stop Agora agent {}: {}", agentId, e.getMessage());
