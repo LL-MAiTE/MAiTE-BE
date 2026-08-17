@@ -112,7 +112,7 @@ public class MeetingService {
         // Agora Conversational AI 에이전트 시작
         try {
             String agentId = agoraService.startConversationalAI(
-                    meetingId.toString(), systemPrompt, "ko-KR", greeting);
+                    meetingId.toString(), systemPrompt, "ko-KR", greeting, meetingId.toString());
             meeting.setAgoraAgentId(agentId);
             log.info("Meeting {} AI agent started: {}", meetingId, agentId);
         } catch (Exception e) {
@@ -195,15 +195,18 @@ public class MeetingService {
                 .orElseThrow(() -> new CustomException(ErrorCode.TRANSCRIPT_NOT_FOUND));
 
         List<MeetingPosition> meetingPositions = meetingPositionRepository.findAllByMeeting(meeting);
-        MeetingPosition matched = findBestMatch(transcript.getText(), meetingPositions);
+        OpenAiService.MatchResult matchResult = openAiService.matchIntentOrHold(transcript.getText(), meetingPositions);
 
         MeetingLog log;
-        if (matched != null) {
+        if (matchResult.matched()) {
+            MeetingPosition matched = meetingPositions.stream()
+                    .filter(mp -> mp.getPosition().getTopic().equals(matchResult.matchedTopic()))
+                    .findFirst().orElse(null);
             log = MeetingLog.builder()
                     .meeting(meeting)
                     .transcript(transcript)
                     .matchedMeetingPosition(matched)
-                    .translatedText(matched.getPosition().getAnswer())
+                    .translatedText(matchResult.responseText())
                     .build();
             log.deliver();
         } else {
@@ -213,7 +216,7 @@ public class MeetingService {
                     .build();
             log.hold();
             meetingLogRepository.save(log);
-            createHoldItem(meeting, log, "매칭된 안건 없음");
+            createHoldItem(meeting, log, matchResult.holdReason() != null ? matchResult.holdReason() : "매칭된 안건 없음");
             notificationRepository.save(Notification.builder()
                     .user(meeting.getAgenda().getCreatedBy())
                     .type(NotificationType.HOLD_RECEIVED)
@@ -298,30 +301,6 @@ public class MeetingService {
             agentLog.deliver();
             meetingLogRepository.save(agentLog);
         }
-    }
-
-    private MeetingPosition findBestMatch(String text, List<MeetingPosition> positions) {
-        if (positions.isEmpty()) return null;
-
-        // OpenAI 의미 매칭 시도, 실패 시 키워드 매칭 fallback
-        UUID matchedId = openAiService.findMatchingPositionId(text, positions);
-        if (matchedId != null) {
-            UUID finalMatchedId = matchedId;
-            return positions.stream()
-                    .filter(mp -> mp.getId().equals(finalMatchedId))
-                    .findFirst().orElse(null);
-        }
-
-        // fallback: 키워드 매칭
-        String lowerText = text.toLowerCase();
-        for (MeetingPosition mp : positions) {
-            String topic = mp.getPosition().getTopic().toLowerCase();
-            String question = mp.getPosition().getQuestionText().toLowerCase();
-            if (lowerText.contains(topic) || question.contains(lowerText.substring(0, Math.min(10, lowerText.length())))) {
-                return mp;
-            }
-        }
-        return null;
     }
 
     private void createHoldItem(Meeting meeting, MeetingLog log, String reason) {

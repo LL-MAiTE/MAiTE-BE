@@ -23,17 +23,16 @@ public class AgoraService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${openai.api-key:}")
-    private String openAiKey;
-
     /**
      * Agora Conversational AI 에이전트를 생성하고 채널에 입장시킴.
-     * Model Credentials(addon)에 등록된 LLM/TTS 이름을 참조.
+     * LLM: 우리 백엔드 /agora/chat-completions (3단계 파이프라인)
+     * TTS: MiniMax managed credential
+     * ASR: Deepgram managed credential
      * @return agentId (나중에 종료할 때 사용)
      */
     @SuppressWarnings("unchecked")
     public String startConversationalAI(String channelName, String systemPrompt,
-                                        String language, String greetingMessage) {
+                                        String language, String greetingMessage, String meetingId) {
         String url = String.format(CONV_AI_BASE, props.getAppId());
 
         String agentToken = "";
@@ -47,31 +46,45 @@ public class AgoraService {
             }
         }
 
+        // LLM: 우리 백엔드 3단계 파이프라인 엔드포인트
+        String llmUrl = props.getCallbackUrl() + "/agora/chat-completions?meetingId=" + meetingId;
         Map<String, Object> llm = new LinkedHashMap<>();
-        if (openAiKey != null && !openAiKey.isBlank()) {
-            llm.put("url", "https://api.openai.com/v1/chat/completions");
-            llm.put("api_key", openAiKey);
-            llm.put("model", "gpt-4o-mini");
-        } else {
-            llm.put("addon", props.getLlmAddon());
-        }
+        llm.put("url", llmUrl);
         llm.put("system_message", systemPrompt);
         llm.put("greeting_message", greetingMessage);
         llm.put("failure_message", "잠시 후 다시 말씀해 주세요.");
         llm.put("max_history", 10);
 
-        // TTS: OpenAI TTS when key available, otherwise addon
+        // TTS: MiniMax managed credential
+        Map<String, Object> ttsVoiceSetting = new LinkedHashMap<>();
+        ttsVoiceSetting.put("voice_id", "female-shaonv");
+        ttsVoiceSetting.put("speed", 1.0);
+        ttsVoiceSetting.put("vol", 1.0);
+        ttsVoiceSetting.put("pitch", 0);
+
+        Map<String, Object> ttsParams = new LinkedHashMap<>();
+        ttsParams.put("model", "speech-02-turbo");
+        ttsParams.put("voice_setting", ttsVoiceSetting);
+
         Map<String, Object> tts = new LinkedHashMap<>();
-        if (openAiKey != null && !openAiKey.isBlank()) {
-            Map<String, Object> ttsParams = new LinkedHashMap<>();
-            ttsParams.put("api_key", openAiKey);
-            ttsParams.put("model", "tts-1");
-            ttsParams.put("voice", "nova");
-            tts.put("vendor", "openai");
-            tts.put("params", ttsParams);
-        } else {
-            tts.put("addon", props.getTtsAddon());
-        }
+        tts.put("vendor", "minimax");
+        tts.put("credential_mode", "managed");
+        tts.put("resource_id", "66449ca1947a4fd0bbc6b400f1e2004d");
+        tts.put("params", ttsParams);
+
+        Map<String, Object> asrParams = new LinkedHashMap<>();
+        asrParams.put("url", "wss://api.deepgram.com/v1/listen");
+        asrParams.put("model", "nova-3");
+        asrParams.put("keyterm", "");
+        asrParams.put("language", "ko");
+
+        Map<String, Object> asr = new LinkedHashMap<>();
+        asr.put("vendor", "deepgram");
+        asr.put("credential_mode", "managed");
+        asr.put("resource_id", "dfcbdd6c-d453-4e9f-bbc8-1d94a63d70c0");
+        asr.put("language", "en");   // Agora 필드 (en 고정)
+        asr.put("params", asrParams); // Deepgram 실제 언어는 params.language=ko
+        asr.put("model", "nova-3");
 
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("channel", channelName);
@@ -79,6 +92,7 @@ public class AgoraService {
         properties.put("agent_rtc_uid", String.valueOf(AGENT_UID));
         properties.put("remote_rtc_uids", List.of("*"));
         properties.put("idle_timeout", 60);
+        properties.put("asr", asr);
         properties.put("llm", llm);
         properties.put("tts", tts);
 

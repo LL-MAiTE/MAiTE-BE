@@ -247,11 +247,13 @@ public class AgendaService {
     }
 
     private Position toPosition(Agenda agenda, AgendaReferenceDocument ref, OpenAiService.DraftPosition d) {
-        List<String> activeFields = new ArrayList<>();
-        if (d.answer() != null) activeFields.add("answer");
-        if (d.preference() != null) activeFields.add("preference");
-        if (d.concessionRange() != null) activeFields.add("concessionRange");
-        if (d.dealbreaker() != null) activeFields.add("dealbreaker");
+        ConfidenceLevel confidence = "추정".equals(d.confidenceLevel())
+                ? ConfidenceLevel.ESTIMATED
+                : ConfidenceLevel.DOCUMENT_BASED;
+
+        List<String> activeFields = (d.activeFields() != null && !d.activeFields().isEmpty())
+                ? d.activeFields()
+                : inferActiveFields(d);
 
         return Position.builder()
                 .agenda(agenda)
@@ -265,8 +267,20 @@ public class AgendaService {
                 .concessionRange(d.concessionRange())
                 .dealbreaker(d.dealbreaker())
                 .priority(d.priority())
-                .confidenceLevel(ConfidenceLevel.DOCUMENT_BASED)
+                .scheduleConstraint(d.scheduleConstraint())
+                .confidenceLevel(confidence)
                 .build();
+    }
+
+    private List<String> inferActiveFields(OpenAiService.DraftPosition d) {
+        List<String> fields = new ArrayList<>();
+        if (d.answer() != null) fields.add("answer");
+        if (d.preference() != null) fields.add("preference");
+        if (d.concessionRange() != null) fields.add("concessionRange");
+        if (d.dealbreaker() != null) fields.add("dealbreaker");
+        if (d.priority() != null) fields.add("priority");
+        if (d.scheduleConstraint() != null) fields.add("scheduleConstraint");
+        return fields;
     }
 
     private List<Position> generateMockPositions(Agenda agenda, List<AgendaReferenceDocument> refDocs) {
