@@ -10,6 +10,10 @@ public class AgoraProperties {
     private String appCertificate;
     private String customerKey;
     private String customerSecret;
+    private String callbackUrl;
+    private String agentPipelineId;
+    private String asrResourceId;
+    private String ttsResourceId;
 
     public String getAppId() { return appId; }
     public void setAppId(String appId) { this.appId = appId; }
@@ -23,15 +27,15 @@ public class AgoraProperties {
     public String getCustomerSecret() { return customerSecret; }
     public void setCustomerSecret(String customerSecret) { this.customerSecret = customerSecret; }
 
-    private String callbackUrl;
     public String getCallbackUrl() { return callbackUrl; }
     public void setCallbackUrl(String callbackUrl) { this.callbackUrl = callbackUrl; }
 
-    private String llmAddon;
-    public String getLlmAddon() { return llmAddon; }
-    public void setLlmAddon(String llmAddon) { this.llmAddon = llmAddon; }
+    public String getAgentPipelineId() { return agentPipelineId; }
+    public void setAgentPipelineId(String agentPipelineId) { this.agentPipelineId = agentPipelineId; }
 
-    private String ttsAddon;
-    public String getTtsAddon() { return ttsAddon; }
-    public void setTtsAddon(String ttsAddon) { this.ttsAddon = ttsAddon; }
+    public String getAsrResourceId() { return asrResourceId; }
+    public void setAsrResourceId(String asrResourceId) { this.asrResourceId = asrResourceId; }
+
+    public String getTtsResourceId() { return ttsResourceId; }
+    public void setTtsResourceId(String ttsResourceId) { this.ttsResourceId = ttsResourceId; }
 }

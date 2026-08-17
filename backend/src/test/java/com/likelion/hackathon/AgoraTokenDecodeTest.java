@@ -11,8 +11,7 @@ import java.util.zip.Inflater;
 public class AgoraTokenDecodeTest {
 
     // ★ 콘솔에서 새로 발급받은 토큰 붙여넣기 (방금 전 것 말고 새 것으로)
-    private static final String CONSOLE_TOKEN =
-            "007eJxTYAh9x/eR4czRA3vLlsuseTbpcNODd8dF2wXLGPpZFwrJ/16gwGBhYZZmYZZmYZxkYmaQmGySamRhYWicZGFgbmhglmpmZJZsdqesMashkJGB3/UMAxMDIxiC+DwMKam5+brJGYl5eak5DFA5kAwLg6GBgSEA2sEkTw==";
+    private static final String CONSOLE_TOKEN = "";
 
     public static void main(String[] args) throws Exception {
         System.out.println("=== Agora Token Decoder ===");
