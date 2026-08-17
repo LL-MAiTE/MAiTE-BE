@@ -35,6 +35,11 @@ public class MeetingLog {
     @Column(columnDefinition = "TEXT")
     private String translatedText;
 
+    // translatedText(원문)를 상대방 언어(agenda.counterpartLanguage)로 옮긴 자막.
+    // 번역 실패 시 null로 남고, 원문 전달 자체는 막지 않는다.
+    @Column(columnDefinition = "TEXT")
+    private String translatedCaption;
+
     private String audioUrl;
 
     // true면 number_confirmations 트리거
@@ -62,5 +67,9 @@ public class MeetingLog {
 
     public void markContainsCriticalNumber() {
         this.containsCriticalNumber = true;
+    }
+
+    public void updateTranslatedCaption(String translatedCaption) {
+        this.translatedCaption = translatedCaption;
     }
 }
