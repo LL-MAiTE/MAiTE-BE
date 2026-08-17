@@ -59,4 +59,8 @@ public class MeetingLog {
     public void hold() {
         this.status = MeetingLogStatus.ON_HOLD;
     }
+
+    public void markContainsCriticalNumber() {
+        this.containsCriticalNumber = true;
+    }
 }

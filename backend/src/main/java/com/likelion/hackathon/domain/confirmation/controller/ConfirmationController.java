@@ -16,6 +16,11 @@ public class ConfirmationController {
 
     private final ConfirmationService confirmationService;
 
+    @GetMapping("/meeting-logs/{id}/number-confirmation")
+    public ApiResponse<NumberConfirmationResponse> getConfirmation(@PathVariable UUID id) {
+        return ApiResponse.ok(confirmationService.getConfirmation(id));
+    }
+
     @PostMapping("/meeting-logs/{id}/number-confirmation")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<NumberConfirmationResponse> createConfirmation(

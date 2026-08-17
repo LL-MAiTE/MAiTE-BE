@@ -85,7 +85,8 @@
 
 | 구현 | Method | Path | 설명 | Request Body | Response Body |
 |------|--------|------|------|-------------|---------------|
-| ✅ | POST | `/meeting-logs/:id/number-confirmation` | 숫자/단위 포함 답변 확인 팝업 트리거 | `{ detectedValue }` | `{ id, meetingLogId, detectedValue, popupShownAt }` |
+| ✅ | GET | `/meeting-logs/:id/number-confirmation` | 이 로그에 자동 생성된 숫자확인 조회 (없으면 404) | - | `{ id, meetingLogId, detectedValue, popupShownAt, responseType, respondedAt, resultedInHold }` |
+| ✅ | POST | `/meeting-logs/:id/number-confirmation` | 숫자/단위 포함 답변 확인 팝업 수동 트리거 (테스트·보완용) | `{ detectedValue }` | `{ id, meetingLogId, detectedValue, popupShownAt }` |
 | ✅ | PATCH | `/number-confirmations/:id` | O/X 응답 또는 타임아웃 처리 (AUTO_HOLD 시 hold_item 자동 생성) | `{ responseType }` (`CONFIRMED`\|`REJECTED`\|`AUTO_HOLD`) | `{ id, responseType, respondedAt, resultedInHold }` |
 
 ---
