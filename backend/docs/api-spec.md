@@ -213,3 +213,4 @@ client.on('stream-message', (uid, data) => {
 | 문서 단건 조회(content 포함) | 목록 API는 content 미포함 — 필요 시 단건 조회 API 추가 필요 |
 | 24~48h 타임아웃 자동확정 | `PATCH /hold-items/:id` 호출하는 스케줄러 별도 구현 필요 |
 | LLM 응답 실패 처리 | Agora ConvAI → OpenAI LLM 호출 실패 시 failure_message 출력 — 원인 미확정 (rate limit 의심) |
+| 회의 합의 결과 판정 정확도 | `resultStatus`(AGREED/OUT_OF_RANGE_AGREED 등)는 OpenAI 판단 결과라 가끔 부정확함 (예: 승인 범위 내 값인데 OUT_OF_RANGE_AGREED로 오판). 화면에는 참고용으로 노출하되, 사람이 최종 확인 필요 |

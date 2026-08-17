@@ -187,6 +187,9 @@ export interface ChannelInfo {
  * AGREED: 승인된 양보 범위(concessionRange) 내에서 합의됨
  * OUT_OF_RANGE_AGREED: 딜브레이커를 벗어나 합의됨 — 사람 확인 필요
  * NOT_AGREED: 논의는 됐으나 결론 없음
+ *
+ * ⚠️ OpenAI 판단 결과라 가끔 부정확함(예: 범위 내 값인데 OUT_OF_RANGE_AGREED로 오판).
+ *    화면엔 참고용으로 노출하되 최종 확정은 사람이 하는 걸 전제로 설계됨.
  */
 export type MeetingPositionResultStatus =
   | 'NOT_DISCUSSED'
