@@ -116,24 +116,34 @@ export interface CreateAgendaRequest {
   translationTargetLanguages?: string[]
 }
 
+/**
+ * DOCUMENT_BASED: 참조 문서에 명시된 내용에 근거함
+ * ESTIMATED: 문서에 직접 근거 없이 일반적인 협상 관행 등으로 추정함 — 검토 시 더 꼼꼼히 볼 것
+ */
+export type ConfidenceLevel = 'DOCUMENT_BASED' | 'ESTIMATED'
+
 export interface Position {
   id: string
   agendaId: string
   topic: string
   questionText: string
-  answer: string
-  preference: string
-  concessionRange: string
-  dealbreaker: string
-  priority: number
-  scheduleConstraint?: string
-  approvalStatus: ApprovalStatus
   generatedBy: PositionGeneratedBy
+  sourceDocumentId?: string
+  activeFields: string[]
+  answer?: string
+  preference?: string
+  concessionRange?: string
+  dealbreaker?: string
+  priority?: number
+  scheduleConstraint?: string
+  /** AI_DRAFT일 때만 의미 있음 (사용자 직접 추가 안건은 null) */
+  confidenceLevel?: ConfidenceLevel
+  approvalStatus: ApprovalStatus
   version: number
   isLatest: boolean
+  supersedesId?: string
   approvedBy?: string
   approvedAt?: string
-  createdAt: string
 }
 
 export interface CreatePositionRequest {
