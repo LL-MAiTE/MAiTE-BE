@@ -244,6 +244,40 @@ public class OpenAiService {
         }
     }
 
+    /**
+     * 전달된 답변(원문)을 상대방 언어로 번역한다. 자막 병기용.
+     * 실패해도 예외를 던지지 않고 null을 반환한다 (원문 전달 자체는 막지 않기 위함).
+     */
+    public String translate(String text, String targetLanguage) {
+        if (text == null || text.isBlank() || targetLanguage == null || targetLanguage.isBlank()) {
+            return null;
+        }
+
+        String userPrompt = String.format("""
+                다음 텍스트를 "%s" 언어로 번역하세요. 협상 회의에서 오간 발화이니
+                의미와 뉘앙스를 정확하고 자연스럽게 옮기세요. 원문에 없는 내용을
+                추가하거나 생략하지 마세요.
+                반드시 아래 JSON 형식으로만 응답하세요:
+                {"translation": "번역된 텍스트"}
+
+                원문: %s
+                """, targetLanguage, text);
+
+        String responseJson = callChatApi(
+                "당신은 국제 협상 회의 전문 통역사입니다. JSON으로만 응답합니다.",
+                userPrompt
+        );
+        if (responseJson == null) return null;
+
+        try {
+            JsonNode root = objectMapper.readTree(responseJson);
+            return text(root, "translation");
+        } catch (Exception e) {
+            log.error("Failed to parse OpenAI translation response: {}", e.getMessage());
+            return null;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private String callChatApi(String systemPrompt, String userPrompt) {
         try {

@@ -244,11 +244,15 @@ export interface MeetingLog {
   meetingId: string
   transcriptId: string
   matchedMeetingPositionId?: string
+  /** 전달된 답변 원문 */
   translatedText?: string
-  transcriptText?: string
-  speakerLabel?: string
+  /** 원문을 상대방 언어(agenda.counterpartLanguage)로 번역한 자막. 번역 실패/대상언어 없음 시 없음 */
+  translatedCaption?: string
+  /** true면 숫자확인 팝업 대상 — GET /meeting-logs/:id/number-confirmation 로 조회 */
+  containsCriticalNumber: boolean
+  limitationNote?: string
+  deliveredAt?: string
   status: MeetingLogStatus
-  createdAt: string
 }
 
 // ── 보류 항목 ─────────────────────────────────────────────────────────────

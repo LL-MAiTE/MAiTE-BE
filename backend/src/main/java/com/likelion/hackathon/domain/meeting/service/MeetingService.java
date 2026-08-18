@@ -258,6 +258,7 @@ public class MeetingService {
             log.deliver();
             meetingLogRepository.save(log);
             detectAndFlagCriticalNumber(log, log.getTranslatedText());
+            translateCaption(log, meeting.getAgenda());
             return MeetingLogResponse.from(log);
         } else {
             log = MeetingLog.builder()
@@ -350,6 +351,7 @@ public class MeetingService {
             agentLog.deliver();
             meetingLogRepository.save(agentLog);
             detectAndFlagCriticalNumber(agentLog, agentText);
+            translateCaption(agentLog, meeting.getAgenda());
         }
     }
 
@@ -368,6 +370,23 @@ public class MeetingService {
                 .detectedValue(matcher.group().trim())
                 .popupShownAt(LocalDateTime.now())
                 .build());
+    }
+
+    // 전달된 답변(원문)을 상대방 언어(agenda.counterpartLanguage)로 번역해
+    // 자막 병기용 필드에 채운다. 대상 언어가 없거나 번역 실패 시 조용히 건너뛴다
+    // (원문 전달 자체는 이미 끝난 뒤라 실패해도 회의 흐름에 영향 없음).
+    private void translateCaption(MeetingLog meetingLog, Agenda agenda) {
+        String targetLanguage = agenda.getCounterpartLanguage();
+        if (targetLanguage == null || targetLanguage.isBlank()) return;
+
+        try {
+            String caption = openAiService.translate(meetingLog.getTranslatedText(), targetLanguage);
+            if (caption != null && !caption.isBlank()) {
+                meetingLog.updateTranslatedCaption(caption);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to translate caption for meetingLog {}: {}", meetingLog.getId(), e.getMessage());
+        }
     }
 
     private MeetingPosition findBestMatch(String text, List<MeetingPosition> positions) {

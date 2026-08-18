@@ -76,7 +76,7 @@
 | ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraToken, agoraAgentUid: 100 }` |
 | ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 + **전체 대화를 안건 목록과 함께 OpenAI로 분석해 안건별 합의 결과(`meeting_positions.resultStatus`/`agreedValue`) 저장** | - | `{ success: true }` |
 | ✅ | POST | `/meetings/:id/transcripts` | 수동 전사 텍스트 저장 (테스트·보완용) | `{ speakerLabel, language, text, spokenAt, confidence }` | `{ id, meetingId, speakerLabel, language, text, spokenAt, confidence }` |
-| ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록 | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, status: "DELIVERED"/"ON_HOLD" }` |
+| ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록. 매칭 성공(전달) 시 원문을 상대방 언어(`counterpartLanguage`)로 번역해 `translatedCaption`에 자동으로 채움(번역 실패해도 원문 전달은 진행) | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, translatedCaption, containsCriticalNumber, status: "DELIVERED"/"ON_HOLD" }` |
 | ✅ | GET | `/meetings/:id/meeting-logs` | 미팅 로그 조회 (사후검토용) | - | `meetingLog[]` |
 
 ---
@@ -215,3 +215,4 @@ client.on('stream-message', (uid, data) => {
 | 24~48h 타임아웃 자동확정 | `PATCH /hold-items/:id` 호출하는 스케줄러 별도 구현 필요 |
 | LLM 응답 실패 처리 | Agora ConvAI → OpenAI LLM 호출 실패 시 failure_message 출력 — 원인 미확정 (rate limit 의심) |
 | 회의 합의 결과 판정 정확도 | `resultStatus`(AGREED/OUT_OF_RANGE_AGREED 등)는 OpenAI 판단 결과라 가끔 부정확함 (예: 승인 범위 내 값인데 OUT_OF_RANGE_AGREED로 오판). 화면에는 참고용으로 노출하되, 사람이 최종 확인 필요 |
+| 실시간 음성 다국어 지원 | 자막 번역(`translatedCaption`, 상대방 언어 1개)만 구현됨. 실시간 통화 자체는 ASR(Deepgram)/TTS(MiniMax) 언어가 `AgoraService`에 하드코딩되어 있고(`ko`/`en` 불일치 존재), `agenda.translationSourceLanguages`/`translationTargetLanguages`(최대 4→10개)는 어디서도 안 읽힘. AI가 실제로 상대방 언어로 "말하게" 하려면 언어별 voice_id 매핑 + 회의별 ASR/TTS 동적 설정이 별도로 필요 |
