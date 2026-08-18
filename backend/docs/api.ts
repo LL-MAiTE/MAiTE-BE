@@ -156,7 +156,11 @@ export const api = {
   // ── 문서 연동 (Notion/Git) ─────────────────────────────────────────────
 
   connections: {
-    /** POST /projects/:id/connections — Notion/Git 연동 등록 */
+    /**
+     * POST /projects/:id/connections — Notion/Git 연동 등록.
+     * workspaceOrRepoName: GIT은 "owner/repo", NOTION은 루트로 삼을 페이지 ID
+     * (그 페이지에 Notion 통합을 미리 공유해둬야 함).
+     */
     create: (projectId: string, type: ConnectionType, workspaceOrRepoName: string, accessToken: string) =>
       request<SourceConnection>('POST', `/projects/${projectId}/connections`, {
         type,
@@ -164,7 +168,11 @@ export const api = {
         accessToken,
       }),
 
-    /** POST /connections/:id/sync — GIT: 실제 저장소에서 문서(.md/.mdx/.txt/.rst) 동기화. NOTION: 아직 미구현(stub) */
+    /**
+     * POST /connections/:id/sync
+     * GIT: 저장소에서 문서(.md/.mdx/.txt/.rst) 동기화.
+     * NOTION: 루트 페이지부터 하위 페이지까지 재귀 동기화 (최대 30개, 데이터베이스/워크스페이스 전체 검색은 미지원).
+     */
     sync: (connectionId: string) =>
       request<SyncResponse>('POST', `/connections/${connectionId}/sync`),
   },

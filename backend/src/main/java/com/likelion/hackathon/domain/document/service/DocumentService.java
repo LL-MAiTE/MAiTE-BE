@@ -13,6 +13,7 @@ import com.likelion.hackathon.domain.user.repository.UserRepository;
 import com.likelion.hackathon.global.exception.CustomException;
 import com.likelion.hackathon.global.exception.ErrorCode;
 import com.likelion.hackathon.global.github.GitHubService;
+import com.likelion.hackathon.global.notion.NotionService;
 import com.likelion.hackathon.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class DocumentService {
     private final ProjectService projectService;
     private final UserRepository userRepository;
     private final GitHubService gitHubService;
+    private final NotionService notionService;
 
     @Transactional
     public SourceConnectionResponse createConnection(UUID projectId, CreateConnectionRequest request) {
@@ -61,14 +63,36 @@ public class DocumentService {
         if (connection.getType() == ConnectionType.GIT) {
             return syncGit(project, connection);
         }
+        if (connection.getType() == ConnectionType.NOTION) {
+            return syncNotion(project, connection);
+        }
 
-        // GIT 외 타입(예: NOTION)은 아직 미구현 — 기존 문서 syncedAt만 갱신
         List<SourceDocument> docs = documentRepository.findAllByConnection(connection);
         LocalDateTime now = LocalDateTime.now();
         docs.forEach(doc -> doc.updateSyncInfo(now));
 
         List<String> latestFiles = docs.stream().map(SourceDocument::getTitle).toList();
         return new SyncResponse(docs.size(), latestFiles);
+    }
+
+    private SyncResponse syncNotion(Project project, SourceConnection connection) {
+        List<NotionService.RemotePage> pages = notionService.fetchDocuments(
+                connection.getWorkspaceOrRepoName(), connection.getAccessToken());
+
+        LocalDateTime now = LocalDateTime.now();
+        List<String> titles = new ArrayList<>();
+        for (NotionService.RemotePage page : pages) {
+            SourceDocument doc = documentRepository.findByConnectionAndPath(connection, page.pageId())
+                    .orElseGet(() -> SourceDocument.builder()
+                            .project(project)
+                            .connection(connection)
+                            .path(page.pageId())
+                            .build());
+            doc.updateFromSync(page.title(), page.content(), now);
+            documentRepository.save(doc);
+            titles.add(page.title());
+        }
+        return new SyncResponse(pages.size(), titles);
     }
 
     private SyncResponse syncGit(Project project, SourceConnection connection) {

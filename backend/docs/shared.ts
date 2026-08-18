@@ -75,13 +75,12 @@ export interface SourceDocumentDetail extends SourceDocument {
 
 // ── 문서 연동 (Notion/Git) ───────────────────────────────────────────────
 
-/** GIT은 실제 동기화 구현됨. NOTION은 아직 stub (연동 등록만 되고 문서를 가져오지는 않음) */
 export type ConnectionType = 'NOTION' | 'GIT'
 
 export interface SourceConnection {
   id: string
   type: ConnectionType
-  /** GIT일 때 "owner/repo" 형식 */
+  /** GIT: "owner/repo" 형식. NOTION: 루트로 삼을 페이지 ID (그 페이지에 미리 integration 공유 필요) */
   workspaceOrRepoName: string
   connectedBy: string
   connectedAt: string

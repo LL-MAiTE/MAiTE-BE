@@ -38,8 +38,8 @@
 
 | 구현 | Method | Path | 설명 | Request Body | Response Body |
 |------|--------|------|------|-------------|---------------|
-| ✅ | POST | `/projects/:id/connections` | Notion/Git 연동 등록 (`type`: NOTION/GIT) | `{ type, workspaceOrRepoName, accessToken }` | `{ id, type, workspaceOrRepoName, connectedBy, connectedAt }` |
-| ✅ | POST | `/connections/:id/sync` | 연동 소스에서 문서 동기화. **GIT은 실제 GitHub API로 동작** (기본 브랜치의 .md/.mdx/.txt/.rst 파일, 최대 30개). **NOTION은 아직 stub** | - | `{ syncedCount, latestFiles: string[] }` |
+| ✅ | POST | `/projects/:id/connections` | Notion/Git 연동 등록 (`type`: NOTION/GIT). **NOTION은 `workspaceOrRepoName`에 루트로 삼을 페이지 ID를 넣어야 함**, 그 페이지에 미리 통합(integration)을 공유해둬야 접근 가능 | `{ type, workspaceOrRepoName, accessToken }` | `{ id, type, workspaceOrRepoName, connectedBy, connectedAt }` |
+| ✅ | POST | `/connections/:id/sync` | 연동 소스에서 문서 동기화. **GIT**: 기본 브랜치의 .md/.mdx/.txt/.rst 파일 (최대 30개). **NOTION**: 루트 페이지부터 하위 페이지(child_page)까지 재귀 탐색해 텍스트 위주 블록을 문서화 (최대 30개) | - | `{ syncedCount, latestFiles: string[] }` |
 | ✅ | POST | `/projects/:id/documents` | md 파일 직접 업로드 | `{ title, content }` | `{ id, projectId, title, isCoreContext, lastModifiedAt, ... }` |
 | ✅ | PATCH | `/documents/:id` | 핵심 맥락 md 지정 등 문서 속성 수정 | `{ isCoreContext }` | `{ id, projectId, title, isCoreContext, ... }` |
 | ✅ | GET | `/documents/:id` | 문서 단건 조회 (content 본문 포함) | - | `{ id, projectId, connectionId, title, path, sourceUrl, content, isCoreContext, lastModifiedAt, syncedAt }` |
@@ -211,7 +211,7 @@ client.on('stream-message', (uid, data) => {
 | 항목 | 설명 |
 |------|------|
 | 발화 의미 매칭 | OpenAI 호출로 매칭, 실패 시 키워드 매칭으로 fallback |
-| Notion 실제 동기화 | 현재 stub — 연동 등록만 되고 문서를 가져오지 않음 (Git은 구현 완료) |
+| Notion 데이터베이스(전체 워크스페이스) 동기화 | 현재는 특정 페이지 ID를 루트로 지정해 그 하위 페이지만 재귀 동기화. 데이터베이스(테이블) 전체나 워크스페이스 전역 검색은 미지원 |
 | LLM 응답 실패 처리 | Agora ConvAI → OpenAI LLM 호출 실패 시 failure_message 출력 — 원인 미확정 (rate limit 의심) |
 | 회의 합의 결과 판정 정확도 | `resultStatus`(AGREED/OUT_OF_RANGE_AGREED 등)는 OpenAI 판단 결과라 가끔 부정확함 (예: 승인 범위 내 값인데 OUT_OF_RANGE_AGREED로 오판). 화면에는 참고용으로 노출하되, 사람이 최종 확인 필요 |
 | 실시간 음성 다국어 지원 | 자막 번역(`translatedCaption`, 상대방 언어 1개)만 구현됨. 실시간 통화 자체는 ASR(Deepgram)/TTS(MiniMax) 언어가 `AgoraService`에 하드코딩되어 있고(`ko`/`en` 불일치 존재), `agenda.translationSourceLanguages`/`translationTargetLanguages`(최대 4→10개)는 어디서도 안 읽힘. AI가 실제로 상대방 언어로 "말하게" 하려면 언어별 voice_id 매핑 + 회의별 ASR/TTS 동적 설정이 별도로 필요 |
