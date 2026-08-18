@@ -20,6 +20,10 @@ jwt:
 token:
   encryption-key: ${TOKEN_ENCRYPTION_KEY}
 
+hold-item:
+  # 답변 전달 후 이 시간(시간 단위)이 지나도 재오픈 안 되면 자동 확정 (명세서 24~48h 중 하한)
+  timeout-hours: ${HOLD_ITEM_TIMEOUT_HOURS:24}
+
 openai:
   api-key: ${OPENAI_API_KEY}
 
