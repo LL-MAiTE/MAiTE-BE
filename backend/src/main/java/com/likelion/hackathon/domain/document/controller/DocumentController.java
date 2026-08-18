@@ -45,6 +45,11 @@ public class DocumentController {
         return ApiResponse.ok(documentService.updateDocument(id, request));
     }
 
+    @GetMapping("/documents/{id}")
+    public ApiResponse<SourceDocumentDetailResponse> getDocument(@PathVariable UUID id) {
+        return ApiResponse.ok(documentService.getDocument(id));
+    }
+
     @GetMapping("/projects/{id}/documents")
     public ApiResponse<List<SourceDocumentResponse>> getDocuments(@PathVariable UUID id) {
         return ApiResponse.ok(documentService.getDocuments(id));

@@ -22,6 +22,7 @@ import type {
   ProjectMember,
   ProjectMemberRole,
   SourceDocument,
+  SourceDocumentDetail,
   ConnectionType,
   SourceConnection,
   SyncResponse,
@@ -146,6 +147,10 @@ export const api = {
     /** PATCH /documents/:id — 핵심 맥락 문서 지정 등 */
     update: (documentId: string, isCoreContext: boolean) =>
       request<SourceDocument>('PATCH', `/documents/${documentId}`, { isCoreContext }),
+
+    /** GET /documents/:id — 단건 조회, content(본문) 포함 */
+    get: (documentId: string) =>
+      request<SourceDocumentDetail>('GET', `/documents/${documentId}`),
   },
 
   // ── 문서 연동 (Notion/Git) ─────────────────────────────────────────────
