@@ -55,7 +55,7 @@
 | ✅ | POST | `/agendas` | 회의 생성 | `{ projectId, title, purpose, counterpartCountry, counterpartLanguage, transcriptLanguages, translationSourceLanguages, translationTargetLanguages }` | `{ id, title, status: "READY", ... }` |
 | ✅ | POST | `/agendas/:id/reference-documents` | 참조 문서 선택 (최소 1개 필수) | `{ sourceDocumentIds: uuid[] }` | `agendaReferenceDocument[]` |
 | ✅ | PATCH | `/agenda-reference-documents/:id` | 참조 문서 제외 처리 | `{ excluded: true }` | `{ id, excluded, ... }` |
-| ✅ | POST | `/agendas/:id/draft-positions` | AI 안건 초안 생성 (현재 stub, 문서 기반 샘플 3개 반환) | - | `position[]` (generatedBy: "AI_DRAFT") |
+| ✅ | POST | `/agendas/:id/draft-positions` | AI 안건 초안 생성. OpenAI로 참조 문서 기반 3~5개 생성, 실패/빈 응답 시 샘플 3개로 fallback. 각 안건에 `confidenceLevel`(문서근거 vs 추정) 포함 | - | `position[]` (generatedBy: "AI_DRAFT") |
 | ✅ | GET | `/agendas/:id/positions` | 안건 목록 조회 (최신 버전만) | - | `position[]` |
 | ✅ | POST | `/agendas/:id/positions` | 안건 직접 추가 | `{ topic, questionText, answer, preference, concessionRange, dealbreaker, priority, scheduleConstraint }` | `{ id, generatedBy: "USER", version: 1, ... }` |
 | ✅ | POST | `/positions/:id/approve` | 안건 승인 | `{ approvalStatus }` | `{ id, approvalStatus, approvedBy, approvedAt, ... }` |

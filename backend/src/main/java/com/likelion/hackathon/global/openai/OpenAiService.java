@@ -36,7 +36,8 @@ public class OpenAiService {
             String preference,
             String concessionRange,
             String dealbreaker,
-            Integer priority
+            Integer priority,
+            String confidenceLevel // "DOCUMENT_BASED" | "ESTIMATED"
     ) {}
 
     /**
@@ -71,12 +72,18 @@ public class OpenAiService {
                       "preference": "선호하는 조건",
                       "concessionRange": "양보 가능한 범위",
                       "dealbreaker": "절대 양보 불가 조건",
-                      "priority": 1
+                      "priority": 1,
+                      "confidenceLevel": "DOCUMENT_BASED"
                     }
                   ]
                 }
                 priority는 1(최고)~5(낮음) 숫자입니다. 없으면 null.
                 문서에서 확인 불가한 항목은 null로 두세요.
+                confidenceLevel은 이 안건의 answer/preference/concessionRange/dealbreaker가
+                실제로 참고 문서에 명시된 내용에 근거하면 "DOCUMENT_BASED",
+                문서에 직접적인 근거가 없어서 일반적인 협상 관행이나 추론으로
+                채운 것이면 "ESTIMATED"로 표시하세요. 하나라도 추정이 섞여있으면
+                ESTIMATED로 표시하세요.
                 """,
                 agenda.getTitle(),
                 agenda.getPurpose() != null ? agenda.getPurpose() : "-",
@@ -103,7 +110,8 @@ public class OpenAiService {
                         text(p, "preference"),
                         text(p, "concessionRange"),
                         text(p, "dealbreaker"),
-                        p.path("priority").isNull() ? null : p.path("priority").asInt()
+                        p.path("priority").isNull() ? null : p.path("priority").asInt(),
+                        text(p, "confidenceLevel")
                 ));
             }
             return result;

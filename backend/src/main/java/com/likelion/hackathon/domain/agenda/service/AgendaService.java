@@ -265,8 +265,19 @@ public class AgendaService {
                 .concessionRange(d.concessionRange())
                 .dealbreaker(d.dealbreaker())
                 .priority(d.priority())
-                .confidenceLevel(ConfidenceLevel.DOCUMENT_BASED)
+                .confidenceLevel(parseConfidenceLevel(d.confidenceLevel()))
                 .build();
+    }
+
+    // AI가 유효하지 않은 값을 주거나 아예 안 준 경우, 근거 없다고 과신하지 않도록
+    // 보수적으로 ESTIMATED(추정)를 기본값으로 둔다.
+    private ConfidenceLevel parseConfidenceLevel(String value) {
+        if (value == null) return ConfidenceLevel.ESTIMATED;
+        try {
+            return ConfidenceLevel.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return ConfidenceLevel.ESTIMATED;
+        }
     }
 
     private List<Position> generateMockPositions(Agenda agenda, List<AgendaReferenceDocument> refDocs) {
