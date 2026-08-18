@@ -133,6 +133,15 @@ public class DocumentService {
                 .stream().map(SourceDocumentResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public SourceDocumentDetailResponse getDocument(UUID documentId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        SourceDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SOURCE_DOCUMENT_NOT_FOUND));
+        projectService.getProjectAndVerifyMember(doc.getProject().getId(), userId);
+        return SourceDocumentDetailResponse.from(doc);
+    }
+
     private User getUser(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));

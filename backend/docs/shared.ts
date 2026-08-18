@@ -68,6 +68,11 @@ export interface SourceDocument {
   syncedAt: string | null
 }
 
+/** GET /documents/:id 전용 — 목록과 달리 본문(content) 포함 */
+export interface SourceDocumentDetail extends SourceDocument {
+  content: string | null
+}
+
 // ── 문서 연동 (Notion/Git) ───────────────────────────────────────────────
 
 /** GIT은 실제 동기화 구현됨. NOTION은 아직 stub (연동 등록만 되고 문서를 가져오지는 않음) */
