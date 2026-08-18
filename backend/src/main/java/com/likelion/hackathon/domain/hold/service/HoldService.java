@@ -23,12 +23,17 @@ import com.likelion.hackathon.global.exception.CustomException;
 import com.likelion.hackathon.global.exception.ErrorCode;
 import com.likelion.hackathon.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HoldService {
@@ -40,6 +45,11 @@ public class HoldService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final ProjectService projectService;
+
+    // 답변 전달 후 이 시간(시간 단위)이 지나도 상대방이 재오픈하지 않으면 자동 확정.
+    // 명세서 기준 24~48시간 범위 중 하한값을 기본값으로 사용.
+    @Value("${hold-item.timeout-hours:24}")
+    private int timeoutHours;
 
     private static final List<HoldItemStatus> RESOLVED_STATUSES = List.of(
             HoldItemStatus.CONFIRMED_IMMEDIATE,
@@ -146,9 +156,7 @@ public class HoldService {
                 item.getMeeting().getAgenda().getProject().getId(), userId);
 
         if (newStatus == HoldItemStatus.CONFIRMED_TIMEOUT) {
-            item.confirmByTimeout();
-            notifyBothSides(item, NotificationType.AUTO_CONFIRMED);
-            checkAndCloseMeeting(item.getMeeting());
+            confirmTimeout(item);
         } else if (newStatus == HoldItemStatus.NEEDS_REALTIME) {
             item.needsRealtime();
             notifyBothSides(item, NotificationType.NEEDS_REALTIME);
@@ -156,6 +164,29 @@ public class HoldService {
         }
 
         return HoldItemResponse.from(item);
+    }
+
+    // 답변 전달 후 timeoutHours가 지나도 재오픈 안 된 항목을 자동 확정 처리.
+    // 15분마다 확인 — 24~48시간 규모 창에 비해 충분히 촘촘함.
+    @Scheduled(initialDelay = 0, fixedRate = 15 * 60 * 1000)
+    @Transactional
+    public void autoConfirmExpiredHoldItems() {
+        LocalDateTime threshold = LocalDateTime.now().minusHours(timeoutHours);
+        List<HoldItem> expired = holdItemRepository
+                .findAllByStatusAndDeliveredToCounterpartAtBefore(HoldItemStatus.AWAITING_ANSWER, threshold);
+
+        if (expired.isEmpty()) return;
+
+        log.info("Auto-confirming {} hold item(s) past {}h timeout", expired.size(), timeoutHours);
+        for (HoldItem item : expired) {
+            confirmTimeout(item);
+        }
+    }
+
+    private void confirmTimeout(HoldItem item) {
+        item.confirmByTimeout();
+        notifyBothSides(item, NotificationType.AUTO_CONFIRMED);
+        checkAndCloseMeeting(item.getMeeting());
     }
 
     private void notifyBothSides(HoldItem item, NotificationType type) {
