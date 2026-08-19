@@ -36,3 +36,6 @@ agora:
   agent-pipeline-id: ${AGORA_AGENT_PIPELINE_ID:}
   asr-resource-id: ${AGORA_ASR_RESOURCE_ID}
   tts-resource-id: ${AGORA_TTS_RESOURCE_ID}
+  # LiveAvatar(HeyGen) — 없으면(빈 값) 아바타 비활성, 음성 전용 에이전트로 그대로 동작
+  liveavatar-api-key: ${LIVEAVATAR_API_KEY:}
+  liveavatar-avatar-id: ${LIVEAVATAR_AVATAR_ID:}
