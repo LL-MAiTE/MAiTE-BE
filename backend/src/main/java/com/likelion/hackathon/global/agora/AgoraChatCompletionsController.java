@@ -80,42 +80,41 @@ public class AgoraChatCompletionsController {
 
             List<Map<String, String>> history = extractConversationHistory(body);
 
-            MatchIntentService.MatchResult match = matchIntentService.matchIntentOrHold(question, positions, history);
-            log.info("[chat-completions] category={} topic={} holdReason={}",
-                    match.category(), match.matchedTopic(), match.holdReason());
+            // 분류 + 응답 생성을 LLM 호출 1번으로 처리한다 — 예전엔 "분류 콜 + 생성 콜"을
+            // 매 턴마다 순차로 두 번 왕복해서 그 지연이 그대로 체감 지연("한 박자 늦다")으로
+            // 쌓였다. 지금은 분류 결과와 그 분류에 맞는 응답을 한 JSON으로 같이 받는다.
+            MatchIntentService.Resolution resolution = matchIntentService.resolve(question, positions, history);
+            log.info("[chat-completions] category={} topic={}", resolution.category(), resolution.matchedTopic());
 
             // 인사·잡담: 안건과 무관하니 hold 문구를 붙일 이유가 없다 — 자연스럽게 짧게 응대만
             // 하고, 혹시 LLM이 실수로 숫자/날짜를 섞으면(비즈니스 내용 유출) 안전한 문구로 대체.
-            if (match.isSmallTalk()) {
-                String smallTalk = matchIntentService.generateSmallTalkResponse(question, history);
-                if (smallTalk == null || guardrail.containsFigure(smallTalk)) {
+            if (resolution.isSmallTalk()) {
+                if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
                     return SMALL_TALK_FALLBACK;
                 }
-                return smallTalk;
+                return resolution.response();
             }
 
             // 안건 밖 질문: 고정 문구를 매번 그대로 반복하면 로봇처럼 들린다는 피드백에 따라
             // 자연스럽게 보류 의사를 표현하되, 새 숫자/날짜가 섞여 나오면 안전한 고정 문구로 대체.
-            if (!match.matched()) {
-                String hold = matchIntentService.generateHoldResponse(question, history);
-                if (hold == null || guardrail.containsFigure(hold)) {
+            if (!resolution.matched()) {
+                if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
                     return HOLD_MESSAGE;
                 }
-                return hold;
+                return resolution.response();
             }
 
             Position position = positions.stream()
-                    .filter(mp -> mp.getPosition().getId().equals(match.matchedPositionId()))
+                    .filter(mp -> mp.getPosition().getId().equals(resolution.matchedPositionId()))
                     .map(MeetingPosition::getPosition)
                     .findFirst()
                     .orElse(null);
 
             if (position == null) return HOLD_MESSAGE;
 
-            String naturalResponse = matchIntentService.generateNaturalResponse(question, position, history);
             // 마지막 방어선: 생성된 문장이 실제로 dealbreaker/양보범위를 넘는지 결정론적으로
             // 재검증. 넘으면 그 문장은 버리고 원본(승인된) answer로 안전하게 대체한다.
-            String verified = guardrail.verify(naturalResponse, position);
+            String verified = guardrail.verify(resolution.response(), position);
             if (verified != null) return verified;
 
             log.warn("[chat-completions] guardrail rejected generated response, falling back to raw answer. topic={}",
