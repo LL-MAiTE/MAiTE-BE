@@ -115,12 +115,19 @@ public class MatchIntentService {
             String holdReason = root.path("holdReason").isNull() ? null : root.path("holdReason").asText(null);
 
             UUID matchedPositionId = null;
-            if (category == Category.MATCHED && matchedTopic != null) {
-                matchedPositionId = meetingPositions.stream()
-                        .filter(mp -> mp.getPosition().getTopic().equals(matchedTopic))
-                        .map(mp -> mp.getPosition().getId())
-                        .findFirst()
-                        .orElse(null);
+            if (category == Category.MATCHED) {
+                // LLM이 MATCHED라고 답했지만 topic을 못 골랐거나(matchedTopic == null) 안건
+                // 목록에 없는 topic을 지어냈으면(찾은 게 없으면) — 이건 사실상 매칭 실패다.
+                // MATCHED로 잘못 남으면 controller가 matched()==true로 보고 hold 분기를
+                // 건너뛰는데, matchedPositionId가 null이라 안건 조회도 실패해서 아무 자연 응대
+                // 없이 고정 문구가 그대로 나가버린다 — 반드시 OUT_OF_SCOPE로 강등시켜야 한다.
+                if (matchedTopic != null) {
+                    matchedPositionId = meetingPositions.stream()
+                            .filter(mp -> mp.getPosition().getTopic().equals(matchedTopic))
+                            .map(mp -> mp.getPosition().getId())
+                            .findFirst()
+                            .orElse(null);
+                }
                 if (matchedPositionId == null) category = Category.OUT_OF_SCOPE;
             }
 
