@@ -9,6 +9,7 @@ import com.likelion.hackathon.domain.meeting.entity.MeetingPosition;
 import com.likelion.hackathon.domain.meeting.repository.MeetingPositionRepository;
 import com.likelion.hackathon.domain.meeting.repository.MeetingRepository;
 import com.likelion.hackathon.global.openai.MatchIntentService;
+import com.likelion.hackathon.global.openai.NegotiationGuardrail;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -38,9 +39,12 @@ public class AgoraChatCompletionsController {
 
     private static final String HOLD_MESSAGE = "확인이 필요한 사항입니다. 내부 검토 후 답변드리겠습니다.";
 
+    private static final String SMALL_TALK_FALLBACK = "네, 안녕하세요.";
+
     private final MeetingRepository meetingRepository;
     private final MeetingPositionRepository meetingPositionRepository;
     private final MatchIntentService matchIntentService;
+    private final NegotiationGuardrail guardrail;
     private final ObjectMapper objectMapper;
 
     @PostMapping(value = "/chat-completions", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -77,8 +81,18 @@ public class AgoraChatCompletionsController {
             List<Map<String, String>> history = extractConversationHistory(body);
 
             MatchIntentService.MatchResult match = matchIntentService.matchIntentOrHold(question, positions, history);
-            log.info("[chat-completions] matched={} topic={} holdReason={}",
-                    match.matched(), match.matchedTopic(), match.holdReason());
+            log.info("[chat-completions] category={} topic={} holdReason={}",
+                    match.category(), match.matchedTopic(), match.holdReason());
+
+            // 인사·잡담: 안건과 무관하니 hold 문구를 붙일 이유가 없다 — 자연스럽게 짧게 응대만
+            // 하고, 혹시 LLM이 실수로 숫자/날짜를 섞으면(비즈니스 내용 유출) 안전한 문구로 대체.
+            if (match.isSmallTalk()) {
+                String smallTalk = matchIntentService.generateSmallTalkResponse(question, history);
+                if (smallTalk == null || guardrail.containsFigure(smallTalk)) {
+                    return SMALL_TALK_FALLBACK;
+                }
+                return smallTalk;
+            }
 
             if (!match.matched()) {
                 return HOLD_MESSAGE;
@@ -93,7 +107,14 @@ public class AgoraChatCompletionsController {
             if (position == null) return HOLD_MESSAGE;
 
             String naturalResponse = matchIntentService.generateNaturalResponse(question, position, history);
-            return naturalResponse != null ? naturalResponse : HOLD_MESSAGE;
+            // 마지막 방어선: 생성된 문장이 실제로 dealbreaker/양보범위를 넘는지 결정론적으로
+            // 재검증. 넘으면 그 문장은 버리고 원본(승인된) answer로 안전하게 대체한다.
+            String verified = guardrail.verify(naturalResponse, position);
+            if (verified != null) return verified;
+
+            log.warn("[chat-completions] guardrail rejected generated response, falling back to raw answer. topic={}",
+                    position.getTopic());
+            return position.getAnswer() != null ? position.getAnswer() : HOLD_MESSAGE;
 
         } catch (IllegalArgumentException e) {
             log.warn("[chat-completions] invalid meetingId format: {}", meetingId);

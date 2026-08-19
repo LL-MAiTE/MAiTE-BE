@@ -27,15 +27,22 @@ public class MatchIntentService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
+    /** MATCHED=안건과 실질적으로 일치, SMALL_TALK=인사·잡담 등 협상과 무관한 사교적 발화,
+     *  OUT_OF_SCOPE=비즈니스 질문이지만 승인된 안건 어디에도 해당 안 됨(보류 대상). */
+    public enum Category { MATCHED, SMALL_TALK, OUT_OF_SCOPE }
+
     public record MatchResult(
-            boolean matched,
+            Category category,
             String matchedTopic,
             UUID matchedPositionId,
             String holdReason
-    ) {}
+    ) {
+        public boolean matched() { return category == Category.MATCHED; }
+        public boolean isSmallTalk() { return category == Category.SMALL_TALK; }
+    }
 
     /**
-     * 1차 필터: 상대방 발화가 승인된 안건 중 어느 것과 일치하는지 판단.
+     * 1차 필터: 상대방 발화를 MATCHED/SMALL_TALK/OUT_OF_SCOPE 세 갈래로 분류.
      * 대화 히스토리를 참고해 카운터오퍼/후속 질문도 올바른 안건으로 매칭.
      */
     public MatchResult matchIntentOrHold(String question, List<MeetingPosition> meetingPositions) {
@@ -45,7 +52,7 @@ public class MatchIntentService {
     public MatchResult matchIntentOrHold(String question, List<MeetingPosition> meetingPositions,
                                          List<Map<String, String>> conversationHistory) {
         if (meetingPositions.isEmpty()) {
-            return new MatchResult(false, null, null, "승인된 협상 안건이 없습니다.");
+            return new MatchResult(Category.OUT_OF_SCOPE, null, null, "승인된 협상 안건이 없습니다.");
         }
 
         StringBuilder positionsSb = new StringBuilder();
@@ -56,15 +63,21 @@ public class MatchIntentService {
         }
 
         String systemPrompt = """
-                당신은 협상 발화 의도 매칭 엔진입니다.
+                당신은 협상 발화 의도 분류 엔진입니다. 상대방 발화를 아래 세 가지 중 하나로 분류하세요.
+                - MATCHED: 핵심 의도가 승인된 안건 목록 중 하나와 실질적으로 일치
+                - SMALL_TALK: 인사, 감사 표현, 잡담, 회의 진행을 위한 사교적 발화 등 협상 내용과
+                  무관한 발화 (예: "안녕하세요", "반갑습니다", "오늘 날씨가 좋네요", "감사합니다")
+                - OUT_OF_SCOPE: 협상/비즈니스 관련 질문이지만 승인된 안건 어디에도 해당하지 않음
+
                 규칙:
                 1. 절대 새 내용을 생성하지 않습니다.
-                2. 상대방 발화의 핵심 의도가 안건의 questionText 주제와 실질적으로 일치해야만 매칭합니다.
+                2. MATCHED는 안건의 questionText 주제와 실질적으로 일치할 때만 판단합니다.
                 3. 이전 대화 맥락을 반드시 참고하세요. 카운터오퍼(날짜/수량/가격 제안), 재확인 질문,
                    압박 발언은 앞선 대화에서 다루던 안건 주제의 연속으로 판단하세요.
-                4. 현재 발화만으로 판단이 어려워도 대화 맥락상 특정 안건과 연관되면 matched=true로 판단하세요.
-                   맥락이 전혀 없을 때만 matched=false로 판단합니다.
-                반드시 JSON으로만 응답: {"matched": true/false, "matchedTopic": "topic값 또는 null", "holdReason": "보류 사유 또는 null"}
+                4. 현재 발화만으로 판단이 어려워도 대화 맥락상 특정 안건과 연관되면 MATCHED로 판단하세요.
+                5. 인사말이나 사교적 표현은 무조건 SMALL_TALK입니다 — OUT_OF_SCOPE로 분류하지 마세요.
+                6. MATCHED도 SMALL_TALK도 아니면 안전하게 OUT_OF_SCOPE로 분류하세요.
+                반드시 JSON으로만 응답: {"category": "MATCHED"|"SMALL_TALK"|"OUT_OF_SCOPE", "matchedTopic": "topic값 또는 null", "holdReason": "보류 사유 또는 null"}
                 """;
 
         StringBuilder recentHistory = new StringBuilder();
@@ -87,30 +100,57 @@ public class MatchIntentService {
 
         String json = callApi(systemPrompt, userPrompt, 0.0, true);
         if (json == null) {
-            return new MatchResult(false, null, null, "AI 매칭 오류");
+            return new MatchResult(Category.OUT_OF_SCOPE, null, null, "AI 매칭 오류");
         }
 
         try {
             JsonNode root = objectMapper.readTree(json);
-            boolean matched = root.path("matched").asBoolean(false);
+            Category category;
+            try {
+                category = Category.valueOf(root.path("category").asText("OUT_OF_SCOPE"));
+            } catch (IllegalArgumentException e) {
+                category = Category.OUT_OF_SCOPE;
+            }
             String matchedTopic = root.path("matchedTopic").isNull() ? null : root.path("matchedTopic").asText(null);
             String holdReason = root.path("holdReason").isNull() ? null : root.path("holdReason").asText(null);
 
             UUID matchedPositionId = null;
-            if (matched && matchedTopic != null) {
+            if (category == Category.MATCHED && matchedTopic != null) {
                 matchedPositionId = meetingPositions.stream()
                         .filter(mp -> mp.getPosition().getTopic().equals(matchedTopic))
                         .map(mp -> mp.getPosition().getId())
                         .findFirst()
                         .orElse(null);
-                if (matchedPositionId == null) matched = false;
+                if (matchedPositionId == null) category = Category.OUT_OF_SCOPE;
             }
 
-            return new MatchResult(matched, matchedTopic, matchedPositionId, holdReason);
+            return new MatchResult(category, matchedTopic, matchedPositionId, holdReason);
         } catch (Exception e) {
             log.error("Failed to parse match result: {}", e.getMessage());
-            return new MatchResult(false, null, null, "파싱 실패");
+            return new MatchResult(Category.OUT_OF_SCOPE, null, null, "파싱 실패");
         }
+    }
+
+    /**
+     * 스몰토크(인사·잡담) 전용 응답 생성. 비즈니스 내용은 절대 언급하지 않게 강하게 제약한다 —
+     * 호출부는 그래도 NegotiationGuardrail.containsFigure()로 한 번 더 확인해야 한다
+     * (LLM이 실수로 숫자/날짜를 섞어 넣을 가능성 자체는 남으므로).
+     */
+    public String generateSmallTalkResponse(String question, List<Map<String, String>> conversationHistory) {
+        String systemPrompt = """
+                당신은 협상 회의에서 답변 작성자를 대리하는 AI입니다. 방금 상대방 발화는 협상 내용과
+                무관한 인사/잡담입니다. 짧고 자연스럽게 한국어로 1문장만 응답하세요.
+                절대 숫자, 날짜, 금액, 조건, 약속 등 비즈니스 내용을 언급하지 마세요.
+                """;
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        for (Map<String, String> h : conversationHistory) {
+            messages.add(Map.of("role", h.get("role"), "content", h.get("content")));
+        }
+        messages.add(Map.of("role", "user", "content", question));
+
+        return callApiWithMessages(messages, 0.7, false);
     }
 
     /**
