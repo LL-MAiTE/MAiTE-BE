@@ -67,8 +67,12 @@ public class AgoraService {
         asr.put("model", "nova-3");
 
         // TTS: MiniMax (Agora Managed Key)
+        // ⚠️ 예전엔 English_radiant_girl(영어 전용 목소리)이 박혀있었음 — AI는 한국어로
+        // 대답하는데 목소리 모델이 영어용이라 발음이 어색했던 게 이것 때문이었을 가능성 높음.
+        // 한국어 목소리로 교체(협상 대리인 톤에 맞게 차분한 쪽으로 선택, 필요하면 교체 가능:
+        // Korean_GentleWoman/Korean_IntellectualMan/Korean_ConsiderateSenior 등도 있음).
         Map<String, Object> voiceSetting = new LinkedHashMap<>();
-        voiceSetting.put("voice_id", "English_radiant_girl");
+        voiceSetting.put("voice_id", "Korean_CalmLady");
 
         Map<String, Object> ttsParams = new LinkedHashMap<>();
         ttsParams.put("url", "wss://api.minimax.io/ws/v1/t2a_v2");
