@@ -94,8 +94,14 @@ public class AgoraChatCompletionsController {
                 return smallTalk;
             }
 
+            // 안건 밖 질문: 고정 문구를 매번 그대로 반복하면 로봇처럼 들린다는 피드백에 따라
+            // 자연스럽게 보류 의사를 표현하되, 새 숫자/날짜가 섞여 나오면 안전한 고정 문구로 대체.
             if (!match.matched()) {
-                return HOLD_MESSAGE;
+                String hold = matchIntentService.generateHoldResponse(question, history);
+                if (hold == null || guardrail.containsFigure(hold)) {
+                    return HOLD_MESSAGE;
+                }
+                return hold;
             }
 
             Position position = positions.stream()

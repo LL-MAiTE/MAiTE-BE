@@ -154,6 +154,39 @@ public class MatchIntentService {
     }
 
     /**
+     * OUT_OF_SCOPE(승인된 안건 밖의 비즈니스 질문) 전용 자연 응답 생성.
+     * "확인이 필요한 사항입니다. 내부 검토 후 답변드리겠습니다." 같은 고정 문구를 매번 그대로
+     * 반복하면 로봇처럼 들린다는 피드백에 따라, 왜 지금 답할 수 없는지를 상황에 맞게 자연스러운
+     * 한국어로 표현하되 — 절대 새로운 약속/숫자/날짜/조건을 만들어내지 않도록 강하게 제약한다.
+     * 호출부는 그래도 NegotiationGuardrail.containsFigure()로 한 번 더 확인해야 한다.
+     */
+    public String generateHoldResponse(String question, List<Map<String, String>> conversationHistory) {
+        String systemPrompt = """
+                당신은 협상 회의에서 답변 작성자를 대리하는 AI입니다. 방금 상대방 발화는 사전에
+                승인받은 협상 안건 범위 밖의 질문/요청입니다. 당신은 이 내용에 대해 임의로 판단하거나
+                결정할 권한이 없습니다.
+
+                아래 원칙을 지키며, 실제 협상가가 즉석에서 대응하듯 자연스럽고 정중한 한국어로
+                1~2문장만 응답하세요:
+                - 이 사안은 당신이 지금 이 자리에서 결정할 수 없고, 내부 확인/검토가 필요하다는
+                  취지를 상황에 맞게 표현하세요. 매번 똑같은 문장을 기계적으로 반복하지 마세요.
+                - 절대 숫자, 날짜, 금액, 수량, 조건, 약속 등 어떤 구체적 내용도 새로 만들어
+                  언급하지 마세요. "검토해보겠다" 수준의 태도만 표현하고 결론은 내지 마세요.
+                - 상대방 발화를 무시하지 말고, 무엇에 대한 질문인지는 자연스럽게 받아준 뒤 보류
+                  의사를 전하세요.
+                """;
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        for (Map<String, String> h : conversationHistory) {
+            messages.add(Map.of("role", h.get("role"), "content", h.get("content")));
+        }
+        messages.add(Map.of("role", "user", "content", question));
+
+        return callApiWithMessages(messages, 0.7, false);
+    }
+
+    /**
      * 2단계: 매칭된 안건 범위 내에서 자연스러운 협상 응답 생성.
      * 선호안부터 제시하고, 압박받을 때만 단계적으로 양보.
      */
