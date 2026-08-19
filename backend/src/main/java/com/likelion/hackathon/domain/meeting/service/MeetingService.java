@@ -287,6 +287,14 @@ public class MeetingService {
     }
 
     @Transactional(readOnly = true)
+    public List<TranscriptResponse> getTranscripts(UUID meetingId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Meeting meeting = getMeetingAndVerify(meetingId, userId);
+        return transcriptRepository.findAllByMeetingOrderBySpokenAt(meeting)
+                .stream().map(TranscriptResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<MeetingLogResponse> getMeetingLogs(UUID meetingId) {
         UUID userId = SecurityUtil.getCurrentUserId();
         Meeting meeting = getMeetingAndVerify(meetingId, userId);
