@@ -20,6 +20,12 @@ public class AgoraService {
     // 아바타(LiveAvatar)는 오디오 에이전트(AGENT_UID)와 별개의 RTC 참가자로 join해서
     // 영상+립싱크 오디오를 직접 퍼블리시한다 — 그래서 uid를 따로 둔다.
     private static final int AVATAR_UID = 9998;
+    // 사람 참여자 uid. 예전엔 0(=클라이언트가 아무 uid나 골라도 되는 토큰)을 쓰고
+    // remote_rtc_uids도 "*"(전체 구독)였는데, avatar.enable=true일 때 Agora가
+    // "subscribing to all remote RTC UIDs is not allowed when avatar.enable is true"로
+    // 거부한다(직접 확인). 그래서 사람 uid를 고정값으로 못박고 remote_rtc_uids에도
+    // 이 값만 명시한다 — MeetingService.startMeeting()도 RTC 토큰을 이 uid로 만든다.
+    public static final int HUMAN_UID = 1;
 
     private final AgoraProperties props;
     private final RestTemplate restTemplate;
@@ -95,7 +101,7 @@ public class AgoraService {
         properties.put("channel", channelName);
         properties.put("token", agentToken);
         properties.put("agent_rtc_uid", String.valueOf(AGENT_UID));
-        properties.put("remote_rtc_uids", List.of("*"));
+        properties.put("remote_rtc_uids", List.of(String.valueOf(HUMAN_UID)));
         properties.put("idle_timeout", 60);
         properties.put("asr", asr);
         properties.put("llm", llm);

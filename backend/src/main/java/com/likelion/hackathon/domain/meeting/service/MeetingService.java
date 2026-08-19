@@ -137,8 +137,11 @@ public class MeetingService {
         String cert = agoraProperties.getAppCertificate();
         if (cert != null && !cert.isBlank()) {
             try {
+                // AgoraService.HUMAN_UID로 고정 — remote_rtc_uids도 이 값 하나만 명시하므로
+                // (avatar.enable=true일 때 "*" 전체구독이 Agora에서 거부됨) 사람 참여자가
+                // 실제로 이 uid로 join해야 에이전트가 그 사람 음성을 구독할 수 있다.
                 rtcToken = AgoraTokenUtil.buildTokenWithUid(
-                        agoraProperties.getAppId(), cert, meetingId.toString(), 0, 3600);
+                        agoraProperties.getAppId(), cert, meetingId.toString(), AgoraService.HUMAN_UID, 3600);
             } catch (Exception e) {
                 log.warn("Agora token generation failed: {}", e.getMessage());
             }
@@ -149,6 +152,7 @@ public class MeetingService {
         result.put("agoraAppId", agoraProperties.getAppId());
         result.put("agoraChannel", meetingId.toString());
         result.put("agoraToken", rtcToken);
+        result.put("agoraUid", AgoraService.HUMAN_UID);
         result.put("agoraAgentUid", 9999);
         return result;
     }
