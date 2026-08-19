@@ -21,7 +21,9 @@ import java.util.*;
 public class OpenAiService {
 
     private static final String CHAT_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String MODEL = "gpt-4o-mini";
+    // gpt-4o-mini는 MatchIntentService와 같은 RPD 한도 풀을 공유해서(이 조직 키 기준 하루
+    // 50회) 라이브 회의 중 소진되면 안건 초안 생성도 같이 막힌다. gpt-4.1로 교체.
+    private static final String MODEL = "gpt-4.1";
 
     @Value("${openai.api-key}")
     private String apiKey;

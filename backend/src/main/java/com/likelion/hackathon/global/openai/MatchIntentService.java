@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -19,7 +20,11 @@ import java.util.*;
 public class MatchIntentService {
 
     private static final String CHAT_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String MODEL = "gpt-4o-mini";
+    // gpt-4o-mini는 이 조직 키에서 일일 요청 한도(RPD 50)가 낮게 걸려 있어 하루 종일
+    // 테스트하다 보면 금방 소진된다. gpt-4.1로 교체 — gpt-4o보다 판단력이 좋으면서도
+    // 지연은 비슷하게 빠름(실측 ~0.8s). gpt-5도 이 키로 되지만 reasoning 모델이라
+    // 트리비얼한 응답에도 ~5s가 걸려 실시간 음성 협상에는 못 씀(직접 실측 확인).
+    private static final String MODEL = "gpt-4.1";
 
     @Value("${openai.api-key}")
     private String apiKey;
@@ -167,28 +172,48 @@ public class MatchIntentService {
 
     @SuppressWarnings("unchecked")
     private String callApiWithMessages(List<Map<String, Object>> messages, double temperature, boolean jsonMode) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", MODEL);
-            body.put("messages", messages);
-            body.put("temperature", temperature);
-            if (jsonMode) {
-                body.put("response_format", Map.of("type", "json_object"));
-            }
-
-            ResponseEntity<Map> resp = restTemplate.exchange(
-                    CHAT_URL, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
-
-            List<Map<String, Object>> choices = (List<Map<String, Object>>) resp.getBody().get("choices");
-            Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-            return (String) message.get("content");
-        } catch (Exception e) {
-            log.error("OpenAI API call failed: {}", e.getMessage());
-            return null;
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", MODEL);
+        body.put("messages", messages);
+        body.put("temperature", temperature);
+        if (jsonMode) {
+            body.put("response_format", Map.of("type", "json_object"));
         }
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        // 429(rate limit)는 한 번만 짧게 대기 후 재시도한다. 결제/티어 승격 직후엔 OpenAI
+        // 엣지 노드 간 반영 시차 때문에 같은 키로도 순간적으로 429가 섞여 나올 수 있는데,
+        // 라이브 협상 중 한 턴이 통째로 고정 문구 폴백으로 죽는 것보다는 낫다.
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                ResponseEntity<Map> resp = restTemplate.exchange(
+                        CHAT_URL, HttpMethod.POST, request, Map.class);
+
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) resp.getBody().get("choices");
+                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                return (String) message.get("content");
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                if (attempt == 0) {
+                    log.warn("OpenAI 429, retrying once after backoff: {}", e.getMessage());
+                    try {
+                        Thread.sleep(800);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    log.error("OpenAI API call failed after retry: {}", e.getMessage());
+                    return null;
+                }
+            } catch (Exception e) {
+                log.error("OpenAI API call failed: {}", e.getMessage());
+                return null;
+            }
+        }
+        return null;
     }
 }
