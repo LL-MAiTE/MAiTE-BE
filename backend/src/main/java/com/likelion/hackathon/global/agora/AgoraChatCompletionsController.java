@@ -8,6 +8,7 @@ import com.likelion.hackathon.domain.meeting.entity.Meeting;
 import com.likelion.hackathon.domain.meeting.entity.MeetingPosition;
 import com.likelion.hackathon.domain.meeting.repository.MeetingPositionRepository;
 import com.likelion.hackathon.domain.meeting.repository.MeetingRepository;
+import com.likelion.hackathon.domain.meeting.service.MeetingService;
 import com.likelion.hackathon.global.openai.MatchIntentService;
 import com.likelion.hackathon.global.openai.NegotiationGuardrail;
 import lombok.RequiredArgsConstructor;
@@ -51,9 +52,18 @@ public class AgoraChatCompletionsController {
 
     private final MeetingRepository meetingRepository;
     private final MeetingPositionRepository meetingPositionRepository;
+    private final MeetingService meetingService;
     private final MatchIntentService matchIntentService;
     private final NegotiationGuardrail guardrail;
     private final ObjectMapper objectMapper;
+
+    // 이 턴을 어떻게 처리했는지 — meetingService.recordLiveTurn()에 그대로 넘겨서
+    // 보류함/알림/사후검토용 Transcript·MeetingLog·HoldItem을 실제로 남기는 데 쓴다.
+    private record ResolvedTurn(String text, boolean isHold, UUID matchedPositionId, String holdReason) {
+        static ResolvedTurn of(String text) {
+            return new ResolvedTurn(text, false, null, null);
+        }
+    }
 
     @PostMapping(value = "/chat-completions", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> chatCompletions(
@@ -67,9 +77,23 @@ public class AgoraChatCompletionsController {
             return sseResponse("");
         }
 
-        String responseText = resolveResponse(meetingId, question, body);
-        String normalized = normalizeForTts(responseText);
+        ResolvedTurn resolved = resolveResponse(meetingId, question, body);
+        String normalized = normalizeForTts(resolved.text());
         log.info("[chat-completions] response={}", normalized);
+
+        // ⚠️ 예전엔 실시간 통화의 대화가 어디에도 저장되지 않았다 — message_subscriber
+        // 웹훅(/agora/callback)이 실제로 동작하지 않는 설정이라 Agora가 호출한 적이
+        // 없었고(로그로 확인), 그 결과 보류함/알림/사후검토가 전부 빈 화면이었다. 이제
+        // 응답을 확정한 바로 이 자리에서 직접 저장한다. 저장 실패가 통화 자체를
+        // 끊으면 안 되니 실패해도 조용히 무시하고 응답은 그대로 내보낸다.
+        try {
+            meetingService.recordLiveTurn(
+                    UUID.fromString(meetingId), question, normalized,
+                    resolved.matchedPositionId(), resolved.isHold(), resolved.holdReason());
+        } catch (Exception e) {
+            log.warn("[chat-completions] failed to record live turn: {}", e.getMessage());
+        }
+
         return sseResponse(normalized);
     }
 
@@ -78,13 +102,13 @@ public class AgoraChatCompletionsController {
         return THOUSANDS_SEPARATOR.matcher(text).replaceAll("");
     }
 
-    private String resolveResponse(String meetingId, String question, Map<String, Object> body) {
+    private ResolvedTurn resolveResponse(String meetingId, String question, Map<String, Object> body) {
         try {
             UUID uuid = UUID.fromString(meetingId);
             Optional<Meeting> meetingOpt = meetingRepository.findById(uuid);
             if (meetingOpt.isEmpty()) {
                 log.warn("[chat-completions] meeting not found: {}", meetingId);
-                return HOLD_MESSAGE;
+                return ResolvedTurn.of(HOLD_MESSAGE);
             }
 
             List<MeetingPosition> positions = meetingPositionRepository.findAllByMeeting(meetingOpt.get());
@@ -105,9 +129,9 @@ public class AgoraChatCompletionsController {
             // 하고, 혹시 LLM이 실수로 숫자/날짜를 섞으면(비즈니스 내용 유출) 안전한 문구로 대체.
             if (resolution.isSmallTalk()) {
                 if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
-                    return SMALL_TALK_FALLBACK;
+                    return ResolvedTurn.of(SMALL_TALK_FALLBACK);
                 }
-                return resolution.response();
+                return ResolvedTurn.of(resolution.response());
             }
 
             // AI/미팅/프로세스 자체에 대한 질문("AI이신 거죠?", "협상 잘 하실 수 있어요?",
@@ -115,18 +139,18 @@ public class AgoraChatCompletionsController {
             // "내부 검토 필요" 톤을 붙일 이유가 없다 — 자연스럽게 바로 응대.
             if (resolution.isMeta()) {
                 if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
-                    return META_FALLBACK;
+                    return ResolvedTurn.of(META_FALLBACK);
                 }
-                return resolution.response();
+                return ResolvedTurn.of(resolution.response());
             }
 
             // 안건 밖 질문: 고정 문구를 매번 그대로 반복하면 로봇처럼 들린다는 피드백에 따라
             // 자연스럽게 보류 의사를 표현하되, 새 숫자/날짜가 섞여 나오면 안전한 고정 문구로 대체.
+            // 실제 협상 내용이 못 넘어갔다는 뜻이므로 보류함/알림 대상이다.
             if (!resolution.matched()) {
-                if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
-                    return HOLD_MESSAGE;
-                }
-                return resolution.response();
+                String text = (resolution.response() == null || guardrail.containsFigure(resolution.response()))
+                        ? HOLD_MESSAGE : resolution.response();
+                return new ResolvedTurn(text, true, null, "매칭된 안건 없음: " + question);
             }
 
             Position position = positions.stream()
@@ -135,23 +159,27 @@ public class AgoraChatCompletionsController {
                     .findFirst()
                     .orElse(null);
 
-            if (position == null) return HOLD_MESSAGE;
+            if (position == null) return ResolvedTurn.of(HOLD_MESSAGE);
 
             // 마지막 방어선: 생성된 문장이 실제로 dealbreaker/양보범위를 넘는지 결정론적으로
             // 재검증. 넘으면 그 문장은 버리고 원본(승인된) answer로 안전하게 대체한다.
             String verified = guardrail.verify(resolution.response(), position);
-            if (verified != null) return verified;
+            if (verified != null) {
+                return new ResolvedTurn(verified, false, position.getId(), null);
+            }
 
             log.warn("[chat-completions] guardrail rejected generated response, falling back to raw answer. topic={}",
                     position.getTopic());
-            return position.getAnswer() != null ? position.getAnswer() : HOLD_MESSAGE;
+            return new ResolvedTurn(
+                    position.getAnswer() != null ? position.getAnswer() : HOLD_MESSAGE,
+                    false, position.getId(), null);
 
         } catch (IllegalArgumentException e) {
             log.warn("[chat-completions] invalid meetingId format: {}", meetingId);
-            return HOLD_MESSAGE;
+            return ResolvedTurn.of(HOLD_MESSAGE);
         } catch (Exception e) {
             log.error("[chat-completions] unexpected error: {}", e.getMessage());
-            return HOLD_MESSAGE;
+            return ResolvedTurn.of(HOLD_MESSAGE);
         }
     }
 

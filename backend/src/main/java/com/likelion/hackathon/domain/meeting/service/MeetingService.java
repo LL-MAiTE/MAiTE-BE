@@ -306,6 +306,76 @@ public class MeetingService {
                 .stream().map(MeetingLogResponse::from).toList();
     }
 
+    /**
+     * 실시간 협상 콜(AgoraChatCompletionsController)에서 매 턴마다 직접 호출한다.
+     *
+     * ⚠️ 예전엔 saveConversationTurn()이 Agora의 message_subscriber 웹훅(/agora/callback)
+     * 으로만 대화를 저장했는데, 그 웹훅이 실제로는 존재하지 않는 설정이라 Agora가 단 한 번도
+     * 호출한 적이 없었다(로그로 확인) — 즉 실제 라이브 통화의 대화는 어디에도 저장된 적이
+     * 없었고, 그 결과 보류함/알림/사후검토가 전부 실데이터를 못 받고 있었다. 여기서는 그
+     * 웹훅을 기다리는 대신, 이미 응답을 결정한 controller가 그 자리에서 바로 저장까지 하게
+     * 한다 — 매칭된 안건 ID와 보류 여부도 controller가 이미 알고 있으니 그대로 넘겨받아서
+     * 재매칭(findBestMatch, 훨씬 부정확한 키워드 매칭) 없이 정확하게 기록한다.
+     */
+    @Transactional
+    public void recordLiveTurn(UUID meetingId, String userText, String aiText,
+                                UUID matchedPositionId, boolean isHold, String holdReason) {
+        Meeting meeting = meetingRepository.findById(meetingId).orElse(null);
+        if (meeting == null) return;
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (userText != null && !userText.isBlank()) {
+            transcriptRepository.save(Transcript.builder()
+                    .meeting(meeting)
+                    .speakerLabel("USER")
+                    .language("ko-KR")
+                    .text(userText)
+                    .spokenAt(now)
+                    .confidence(1.0)
+                    .build());
+        }
+
+        if (aiText == null || aiText.isBlank()) return;
+
+        Transcript aiTranscript = transcriptRepository.save(Transcript.builder()
+                .meeting(meeting)
+                .speakerLabel("AI_AGENT")
+                .language("ko-KR")
+                .text(aiText)
+                .spokenAt(now.plusSeconds(1))
+                .confidence(1.0)
+                .build());
+
+        MeetingLog log;
+        if (isHold) {
+            log = MeetingLog.builder().meeting(meeting).transcript(aiTranscript).build();
+            log.hold();
+            meetingLogRepository.save(log);
+            createHoldItem(meeting, log, holdReason != null ? holdReason : "매칭된 안건 없음");
+            notificationRepository.save(Notification.builder()
+                    .user(meeting.getAgenda().getCreatedBy())
+                    .type(NotificationType.HOLD_RECEIVED)
+                    .referenceId(log.getId())
+                    .referenceType("meeting_log")
+                    .build());
+        } else {
+            MeetingPosition matched = matchedPositionId != null
+                    ? meetingPositionRepository.findAllByMeeting(meeting).stream()
+                            .filter(mp -> mp.getPosition().getId().equals(matchedPositionId))
+                            .findFirst().orElse(null)
+                    : null;
+            log = MeetingLog.builder()
+                    .meeting(meeting)
+                    .transcript(aiTranscript)
+                    .matchedMeetingPosition(matched)
+                    .translatedText(aiText)
+                    .build();
+            log.deliver();
+            meetingLogRepository.save(log);
+        }
+    }
+
     // Agora 콜백에서 호출 (인증 없음) — 대화 턴 한 쌍(사람 발화 + AI 응답)을 저장
     @Transactional
     public void saveConversationTurn(String channelName, String userText, String agentText, long startMs) {
