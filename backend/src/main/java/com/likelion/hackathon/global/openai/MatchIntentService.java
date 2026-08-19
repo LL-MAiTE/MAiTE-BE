@@ -33,8 +33,15 @@ public class MatchIntentService {
     private final ObjectMapper objectMapper;
 
     /** MATCHED=안건과 실질적으로 일치, SMALL_TALK=인사·잡담 등 협상과 무관한 사교적 발화,
-     *  OUT_OF_SCOPE=비즈니스 질문이지만 승인된 안건 어디에도 해당 안 됨(보류 대상). */
-    public enum Category { MATCHED, SMALL_TALK, OUT_OF_SCOPE }
+     *  META=이 AI/미팅/프로세스 자체에 대한 질문(비즈니스 결정이 필요 없어 자연스럽게 바로
+     *  답해도 되는 것), OUT_OF_SCOPE=비즈니스 질문이지만 승인된 안건 어디에도 해당 안 됨
+     *  (보류 대상).
+     *  META를 따로 둔 이유: "오늘 어떤 안건 다룰 수 있어요?" 하나만 프롬프트에 예외로
+     *  박아두면 "AI이신 거죠?", "협상 잘 하실 수 있어요?" 같은 비슷한 성격의 다른 질문들은
+     *  여전히 OUT_OF_SCOPE의 "내부 검토 필요" 톤으로 새버린다 — 문구를 하나씩 늘리는 대신
+     *  의미 단위 카테고리를 하나 추가해서 LLM이 알아서 분류하게 하면 표현이 뭐가 됐든
+     *  일관되게 커버된다. */
+    public enum Category { MATCHED, SMALL_TALK, META, OUT_OF_SCOPE }
 
     /**
      * 분류 결과와 그 분류에 맞는 자연스러운 응답까지 한 번에 담는다.
@@ -52,6 +59,7 @@ public class MatchIntentService {
     ) {
         public boolean matched() { return category == Category.MATCHED; }
         public boolean isSmallTalk() { return category == Category.SMALL_TALK; }
+        public boolean isMeta() { return category == Category.META; }
     }
 
     public Resolution resolve(String question, List<MeetingPosition> meetingPositions,
@@ -83,7 +91,7 @@ public class MatchIntentService {
 
         String systemPrompt = """
                 당신은 협상 회의에서 답변 작성자를 대리하는 AI 협상 대리인입니다. 상대방 발화를
-                분석해서 아래 세 카테고리 중 하나로 분류하는 동시에, 그 분류에 맞는 응답까지
+                분석해서 아래 네 카테고리 중 하나로 분류하는 동시에, 그 분류에 맞는 응답까지
                 자연스러운 한국어 구어체로 함께 생성하세요. 실제 협상가와 대화하는 것 같은
                 자연스러운 대화 품질을 내되, 비즈니스 내용에 대해서는 절대 임의로 결정하지 않습니다.
 
@@ -95,11 +103,13 @@ public class MatchIntentService {
                 - SMALL_TALK: 인사, 감사 표현, 잡담, 회의 진행을 위한 사교적 발화 등 협상 내용과
                   무관한 발화 (예: "안녕하세요", "오늘 날씨가 좋네요"). 인사말/사교적 표현은
                   무조건 SMALL_TALK입니다 — OUT_OF_SCOPE로 분류하지 마세요.
-                - OUT_OF_SCOPE: 비즈니스 관련 질문/요청이지만 승인된 안건 어디에도 해당하지 않음.
-                  단, "오늘 어떤 안건들을 다룰 수 있나요?" 같이 다룰 수 있는 주제 목록 자체를
-                  묻는 메타 질문은 여기 포함하되, 응답에 안건 목록의 topic들을 자연스럽게
-                  나열해서 알려주세요 — 이미 승인된 주제 이름을 알려주는 것은 새로운 결정이
-                  아니므로 허용됩니다.
+                - META: 협상 안건 자체는 아니지만 이 AI/미팅/협상 프로세스에 대한 질문이나
+                  발언 — 예: "당신은 AI인가요?", "협상을 제대로 하실 수 있어요?", "오늘 어떤
+                  안건들을 다룰 수 있나요?", "이 툴 저도 쓰고 싶은데요", "좀 못 미더운데요".
+                  비즈니스 결정이 필요 없는 내용이므로 OUT_OF_SCOPE의 "내부 검토가 필요"
+                  톤을 쓰지 말고 META로 분류하세요.
+                - OUT_OF_SCOPE: 승인된 안건 어디에도 해당하지 않는 "비즈니스" 질문/요청
+                  (META가 아닌 것 — 실제 조건/금액/일정 등 새로운 결정이 필요한 내용).
 
                 [응답 생성 원칙 — 카테고리별]
                 - MATCHED: 매칭된 안건의 선호안부터 제시하고, 상대가 압박할 때만 양보 가능
@@ -107,21 +117,29 @@ public class MatchIntentService {
                   거절하세요. 그 안건 필드에 없는 숫자/날짜/조건은 절대 만들어내지 마세요.
                 - SMALL_TALK: 짧고 자연스럽게 1문장. 숫자, 날짜, 금액, 조건, 약속 등 비즈니스
                   내용은 절대 언급하지 마세요.
-                - OUT_OF_SCOPE(안건 목록 질문 제외): 이 사안은 지금 이 자리에서 결정할 권한이
-                  없고 내부 확인/검토가 필요하다는 취지를, 매번 다른 자연스러운 표현으로
-                  1~2문장 전달하세요. 숫자/날짜/금액/조건/약속 등 새로운 구체적 내용은 절대
-                  만들어내지 마세요. "검토해보겠다" 수준의 태도만 표현하고 결론은 내지 마세요.
+                - META: 자신감 있고 자연스럽게 1~2문장으로 바로 답하세요. "내부 검토가
+                  필요하다" 같은 보류 톤은 쓰지 마세요. 안건 목록을 묻는 질문이면 승인된
+                  안건들의 topic을 그대로 나열해서 알려주세요(이미 승인된 주제 이름을
+                  알려주는 것은 새로운 결정이 아니므로 허용). 그 외 새로운 비즈니스 숫자/
+                  날짜/조건은 만들어내지 마세요.
+                - OUT_OF_SCOPE: 이 사안은 지금 이 자리에서 결정할 권한이 없고 내부 확인/검토가
+                  필요하다는 취지를, 매번 다른 자연스러운 표현으로 1~2문장 전달하세요.
+                  숫자/날짜/금액/조건/약속 등 새로운 구체적 내용은 절대 만들어내지 마세요.
+                  "검토해보겠다" 수준의 태도만 표현하고 결론은 내지 마세요.
 
                 [절대 원칙]
                 1. 승인된 안건 필드(topic/questionText/공식 답변/선호안/양보 가능 범위/절대
                    양보 불가)에 없는 내용은 어떤 카테고리에서도 지어내지 않습니다.
                 2. 응답은 항상 2~3문장 이내로 간결하게.
+                3. 숫자는 항상 자릿수 구분 쉼표 없이 씁니다(예: "1000개", "12000원") — 이
+                   응답은 음성 합성(TTS)으로 읽히는데, 쉼표가 들어가면 "천 개"가 아니라
+                   숫자를 하나씩 끊어 읽는 오류가 생깁니다.
 
                 승인된 협상 안건 목록:
                 %s
 
                 반드시 JSON으로만 응답:
-                {"category": "MATCHED"|"SMALL_TALK"|"OUT_OF_SCOPE", "matchedTopic": "MATCHED일 때 그 안건의 topic값, 아니면 null", "response": "위 원칙에 따른 실제 응답 문장"}
+                {"category": "MATCHED"|"SMALL_TALK"|"META"|"OUT_OF_SCOPE", "matchedTopic": "MATCHED일 때 그 안건의 topic값, 아니면 null", "response": "위 원칙에 따른 실제 응답 문장"}
                 """.formatted(positionsSb);
 
         List<Map<String, Object>> messages = new ArrayList<>();

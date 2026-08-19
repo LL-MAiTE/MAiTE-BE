@@ -41,6 +41,14 @@ public class AgoraChatCompletionsController {
 
     private static final String SMALL_TALK_FALLBACK = "네, 안녕하세요.";
 
+    private static final String META_FALLBACK = "죄송합니다, 다시 한 번 말씀해 주시겠어요?";
+
+    // TTS가 "1,000"처럼 자릿수 구분 쉼표가 들어간 숫자를 하나씩 끊어 읽는 문제가 있어서
+    // (예: "1,000개" → "일, 영개"), 프롬프트로도 쉼표를 쓰지 말라고 지시했지만 LLM이 실수로
+    // 섞어 넣을 수 있으니 마지막 방어선으로 한 번 더 제거한다.
+    private static final java.util.regex.Pattern THOUSANDS_SEPARATOR =
+            java.util.regex.Pattern.compile("(?<=\\d),(?=\\d{3}\\b)");
+
     private final MeetingRepository meetingRepository;
     private final MeetingPositionRepository meetingPositionRepository;
     private final MatchIntentService matchIntentService;
@@ -60,7 +68,12 @@ public class AgoraChatCompletionsController {
         }
 
         String responseText = resolveResponse(meetingId, question, body);
-        return sseResponse(responseText);
+        return sseResponse(normalizeForTts(responseText));
+    }
+
+    private String normalizeForTts(String text) {
+        if (text == null) return null;
+        return THOUSANDS_SEPARATOR.matcher(text).replaceAll("");
     }
 
     private String resolveResponse(String meetingId, String question, Map<String, Object> body) {
@@ -91,6 +104,16 @@ public class AgoraChatCompletionsController {
             if (resolution.isSmallTalk()) {
                 if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
                     return SMALL_TALK_FALLBACK;
+                }
+                return resolution.response();
+            }
+
+            // AI/미팅/프로세스 자체에 대한 질문("AI이신 거죠?", "협상 잘 하실 수 있어요?",
+            // "오늘 안건 뭐뭐 있어요?" 등): 비즈니스 결정이 필요 없으니 OUT_OF_SCOPE의
+            // "내부 검토 필요" 톤을 붙일 이유가 없다 — 자연스럽게 바로 응대.
+            if (resolution.isMeta()) {
+                if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
+                    return META_FALLBACK;
                 }
                 return resolution.response();
             }
