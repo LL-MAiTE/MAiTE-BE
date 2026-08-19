@@ -68,7 +68,9 @@ public class AgoraChatCompletionsController {
         }
 
         String responseText = resolveResponse(meetingId, question, body);
-        return sseResponse(normalizeForTts(responseText));
+        String normalized = normalizeForTts(responseText);
+        log.info("[chat-completions] response={}", normalized);
+        return sseResponse(normalized);
     }
 
     private String normalizeForTts(String text) {
