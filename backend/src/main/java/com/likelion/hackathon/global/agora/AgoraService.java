@@ -17,6 +17,9 @@ public class AgoraService {
 
     private static final String CONV_AI_BASE = "https://api.agora.io/api/conversational-ai-agent/v2/projects/%s/join";
     private static final int AGENT_UID = 9999;
+    // 아바타(LiveAvatar)는 오디오 에이전트(AGENT_UID)와 별개의 RTC 참가자로 join해서
+    // 영상+립싱크 오디오를 직접 퍼블리시한다 — 그래서 uid를 따로 둔다.
+    private static final int AVATAR_UID = 9998;
 
     private final AgoraProperties props;
     private final RestTemplate restTemplate;
@@ -74,6 +77,9 @@ public class AgoraService {
         ttsParams.put("url", "wss://api.minimax.io/ws/v1/t2a_v2");
         ttsParams.put("model", "speech-2.8-turbo");
         ttsParams.put("voice_setting", voiceSetting);
+        // LiveAvatar는 24kHz만 받는다(다른 샘플레이트면 세션 시작부터 에러) — 기본값은 44100이라
+        // 아바타 없이 음성만 쓸 때도 명시적으로 24000으로 맞춰둔다(음질 차이는 거의 없음).
+        ttsParams.put("audio_setting", Map.of("sample_rate", 24000));
 
         Map<String, Object> tts = new LinkedHashMap<>();
         tts.put("vendor", "minimax");
@@ -90,6 +96,13 @@ public class AgoraService {
         properties.put("asr", asr);
         properties.put("llm", llm);
         properties.put("tts", tts);
+
+        // 아바타(LiveAvatar): API 키가 설정돼있을 때만 활성화. 없으면 지금처럼 음성 전용으로
+        // 동작한다 — 아바타는 순전히 추가 기능이라 설정 안 해도 기존 흐름이 안 깨진다.
+        Map<String, Object> avatar = buildAvatarConfig(channelName, cert);
+        if (avatar != null) {
+            properties.put("avatar", avatar);
+        }
 
         if (props.getCallbackUrl() != null && !props.getCallbackUrl().isBlank()) {
             properties.put("message_subscriber", Map.of(
@@ -115,6 +128,44 @@ public class AgoraService {
             log.error("Agora ConvAI error {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw e;
         }
+    }
+
+    /**
+     * LiveAvatar(HeyGen) 아바타 설정. Agora가 자기 TTS(MiniMax) 결과를 알아서 LiveAvatar로
+     * 라우팅해주는 구조라, 우리 TTS 파이프라인은 안 건드려도 된다 — 여기서 하는 건 별도
+     * RTC uid(AVATAR_UID)로 join용 토큰 하나 더 만들고, avatar 블록에 넣어주는 것뿐.
+     * liveavatar-api-key가 비어있으면 null을 반환해서 기존 음성 전용 흐름을 그대로 유지한다.
+     */
+    private Map<String, Object> buildAvatarConfig(String channelName, String cert) {
+        String apiKey = props.getLiveavatarApiKey();
+        String avatarId = props.getLiveavatarAvatarId();
+        if (apiKey == null || apiKey.isBlank() || avatarId == null || avatarId.isBlank()) {
+            return null;
+        }
+
+        String avatarToken = "";
+        if (cert != null && !cert.isBlank()) {
+            try {
+                avatarToken = AgoraTokenUtil.buildTokenWithUid(
+                        props.getAppId(), cert, channelName, AVATAR_UID, 3600);
+            } catch (Exception e) {
+                log.warn("Failed to generate avatar token: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        Map<String, Object> avatarParams = new LinkedHashMap<>();
+        avatarParams.put("api_key", apiKey);
+        avatarParams.put("avatar_id", avatarId);
+        avatarParams.put("quality", "high");
+        avatarParams.put("agora_uid", String.valueOf(AVATAR_UID));
+        avatarParams.put("agora_token", avatarToken);
+
+        Map<String, Object> avatar = new LinkedHashMap<>();
+        avatar.put("vendor", "liveavatar");
+        avatar.put("enable", true);
+        avatar.put("params", avatarParams);
+        return avatar;
     }
 
     public void stopConversationalAI(String agentId) {

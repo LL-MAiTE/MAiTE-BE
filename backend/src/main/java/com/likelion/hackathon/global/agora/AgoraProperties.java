@@ -14,6 +14,8 @@ public class AgoraProperties {
     private String agentPipelineId;
     private String asrResourceId;
     private String ttsResourceId;
+    private String liveavatarApiKey;
+    private String liveavatarAvatarId;
 
     public String getAppId() { return appId; }
     public void setAppId(String appId) { this.appId = appId; }
@@ -38,4 +40,10 @@ public class AgoraProperties {
 
     public String getTtsResourceId() { return ttsResourceId; }
     public void setTtsResourceId(String ttsResourceId) { this.ttsResourceId = ttsResourceId; }
+
+    public String getLiveavatarApiKey() { return liveavatarApiKey; }
+    public void setLiveavatarApiKey(String liveavatarApiKey) { this.liveavatarApiKey = liveavatarApiKey; }
+
+    public String getLiveavatarAvatarId() { return liveavatarAvatarId; }
+    public void setLiveavatarAvatarId(String liveavatarAvatarId) { this.liveavatarAvatarId = liveavatarAvatarId; }
 }
