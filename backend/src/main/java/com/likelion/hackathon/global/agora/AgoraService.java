@@ -71,7 +71,7 @@ public class AgoraService {
         asr.put("vendor", "deepgram");
         asr.put("credential_mode", "managed");
         asr.put("resource_id", props.getAsrResourceId());
-        asr.put("language", "en");  // Agora 최상위 언어 필드
+        asr.put("language", "ko");  // Agora 최상위 언어 필드 — params.language(ko)와 어긋나 있던 걸(예전 영어 전용 잔재로 추정) 통일
         asr.put("params", asrParams);
         asr.put("model", "nova-3");
 
