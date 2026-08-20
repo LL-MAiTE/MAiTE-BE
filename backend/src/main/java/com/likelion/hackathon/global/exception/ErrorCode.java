@@ -21,6 +21,9 @@ public enum ErrorCode {
     NOT_PROJECT_MEMBER(HttpStatus.FORBIDDEN, "프로젝트 멤버가 아닙니다."),
     ALREADY_PROJECT_MEMBER(HttpStatus.CONFLICT, "이미 프로젝트 멤버입니다."),
     PROJECT_HAS_AGENDAS(HttpStatus.CONFLICT, "이미 회의 준비가 시작된 프로젝트는 삭제할 수 없습니다. 관련 회의를 먼저 정리해주세요."),
+    PROJECT_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "초대 정보를 찾을 수 없습니다."),
+    NOT_YOUR_INVITATION(HttpStatus.FORBIDDEN, "본인에게 온 초대만 수락/거절할 수 있습니다."),
+    INVITATION_ALREADY_RESOLVED(HttpStatus.CONFLICT, "이미 처리된 초대입니다."),
 
     // Document
     SOURCE_CONNECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "연동 소스를 찾을 수 없습니다."),

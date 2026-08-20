@@ -2,6 +2,7 @@ package com.likelion.hackathon.domain.project.repository;
 
 import com.likelion.hackathon.domain.project.entity.Project;
 import com.likelion.hackathon.domain.project.entity.ProjectMember;
+import com.likelion.hackathon.domain.project.entity.enums.ProjectMemberStatus;
 import com.likelion.hackathon.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -13,4 +14,5 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, UU
     boolean existsByProjectAndUser(Project project, User user);
     Optional<ProjectMember> findByProjectAndUser(Project project, User user);
     List<ProjectMember> findAllByProject(Project project);
+    List<ProjectMember> findAllByUserAndStatus(User user, ProjectMemberStatus status);
 }

@@ -6,5 +6,6 @@ public enum NotificationType {
     REOPEN_REQUESTED,   // 재오픈_요청 — 상대방이 재오픈, 답변 작성자에게
     AUTO_CONFIRMED,     // 자동확정 — 24~48h 타임아웃으로 자동 확정
     NEEDS_REALTIME,     // 실시간조율필요 — 재오픈 상한 도달, 양측에게
-    MEETING_CLOSED      // 미팅_종료 — 모든 보류 항목 종결, 양측에게
+    MEETING_CLOSED,     // 미팅_종료 — 모든 보류 항목 종결, 양측에게
+    PROJECT_INVITED     // 프로젝트_초대 — 팀원 초대 받음, 수락/거절 전까지 계속 노출
 }

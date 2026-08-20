@@ -16,10 +16,14 @@ import com.likelion.hackathon.domain.meeting.repository.MeetingLogRepository;
 import com.likelion.hackathon.domain.meeting.repository.MeetingPositionRepository;
 import com.likelion.hackathon.domain.meeting.repository.MeetingRepository;
 import com.likelion.hackathon.domain.meeting.repository.TranscriptRepository;
+import com.likelion.hackathon.domain.notification.entity.Notification;
+import com.likelion.hackathon.domain.notification.entity.enums.NotificationType;
+import com.likelion.hackathon.domain.notification.repository.NotificationRepository;
 import com.likelion.hackathon.domain.project.dto.*;
 import com.likelion.hackathon.domain.project.entity.Project;
 import com.likelion.hackathon.domain.project.entity.ProjectMember;
 import com.likelion.hackathon.domain.project.entity.enums.ProjectMemberRole;
+import com.likelion.hackathon.domain.project.entity.enums.ProjectMemberStatus;
 import com.likelion.hackathon.domain.project.repository.ProjectMemberRepository;
 import com.likelion.hackathon.domain.project.repository.ProjectRepository;
 import com.likelion.hackathon.domain.review.repository.RequiredReviewRepository;
@@ -57,6 +61,7 @@ public class ProjectService {
     private final ReviewActionRepository reviewActionRepository;
     private final SourceDocumentRepository sourceDocumentRepository;
     private final SourceConnectionRepository sourceConnectionRepository;
+    private final NotificationRepository notificationRepository;
 
     @Transactional
     public ProjectResponse create(CreateProjectRequest request) {
@@ -91,6 +96,9 @@ public class ProjectService {
         return ProjectResponse.from(project);
     }
 
+    /** 초대는 바로 멤버로 확정되지 않는다 — PENDING으로 만들어두고 초대받은 사람에게
+     * 알림을 보낸다. 그 사람이 accept()해야 비로소 "내 프로젝트" 목록에 뜨고 정식 멤버가
+     * 된다(초대·수락 과정 없이 곧바로 프로젝트가 보이던 문제 수정). */
     @Transactional
     public ProjectMemberResponse inviteMember(UUID projectId, InviteMemberRequest request) {
         UUID userId = SecurityUtil.getCurrentUserId();
@@ -106,8 +114,17 @@ public class ProjectService {
                 .project(project)
                 .user(invitee)
                 .role(request.role())
+                .status(ProjectMemberStatus.PENDING)
                 .build();
         projectMemberRepository.save(member);
+
+        notificationRepository.save(Notification.builder()
+                .user(invitee)
+                .type(NotificationType.PROJECT_INVITED)
+                .referenceId(member.getId())
+                .referenceType("project_member")
+                .build());
+
         return ProjectMemberResponse.from(member);
     }
 
@@ -116,6 +133,37 @@ public class ProjectService {
         UUID userId = SecurityUtil.getCurrentUserId();
         Project project = getProjectAndVerifyMember(projectId, userId);
         return projectMemberRepository.findAllByProject(project).stream()
+                .map(ProjectMemberResponse::from)
+                .toList();
+    }
+
+    /** 초대받은 사람 본인만 수락/거절할 수 있다. */
+    @Transactional
+    public ProjectMemberResponse respondToInvitation(UUID memberId, boolean accept) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        ProjectMember member = projectMemberRepository.findById(memberId)
+                .orElseThrow(() -> new CustomException(ErrorCode.PROJECT_MEMBER_NOT_FOUND));
+        if (!member.getUser().getId().equals(userId)) {
+            throw new CustomException(ErrorCode.NOT_YOUR_INVITATION);
+        }
+        if (member.getStatus() != ProjectMemberStatus.PENDING) {
+            throw new CustomException(ErrorCode.INVITATION_ALREADY_RESOLVED);
+        }
+        if (accept) {
+            member.accept();
+        } else {
+            member.decline();
+        }
+        return ProjectMemberResponse.from(member);
+    }
+
+    /** 로그인한 사람에게 아직 응답 안 한 초대 전체 — 알림 패널 클릭 없이도 "받은 초대"를
+     * 한곳에서 볼 수 있게(설정/알림 화면 등에서 쓸 수 있음). */
+    @Transactional(readOnly = true)
+    public List<ProjectMemberResponse> getMyPendingInvitations() {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        User user = getUser(userId);
+        return projectMemberRepository.findAllByUserAndStatus(user, ProjectMemberStatus.PENDING).stream()
                 .map(ProjectMemberResponse::from)
                 .toList();
     }
