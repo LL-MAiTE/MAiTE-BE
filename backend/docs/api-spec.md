@@ -78,6 +78,7 @@
 | ✅ | POST | `/meetings/:id/start` | 미팅 시작 — 안건+문서 기반 시스템 프롬프트 생성 후 Agora Conversational AI 에이전트를 채널에 입장시킴 | - | `{ disclosureCompletedAt, agoraAppId, agoraChannel, agoraToken, agoraAgentUid: 100 }` |
 | ✅ | POST | `/meetings/:id/end` | 음성 세션 종료 + AI 에이전트 퇴장 + **전체 대화를 안건 목록과 함께 OpenAI로 분석해 안건별 합의 결과(`meeting_positions.resultStatus`/`agreedValue`) 저장** | - | `{ success: true }` |
 | ✅ | POST | `/meetings/:id/transcripts` | 수동 전사 텍스트 저장 (테스트·보완용) | `{ speakerLabel, language, text, spokenAt, confidence }` | `{ id, meetingId, speakerLabel, language, text, spokenAt, confidence }` |
+| ✅ | GET | `/meetings/:id/transcripts` | 전사 원문 목록 조회 (실시간 대화 패널 폴링용) | - | `transcript[]` |
 | ✅ | POST | `/meetings/:id/meeting-logs` | 전사 ↔ 승인 안건 매칭 + 상태 기록. 매칭 성공(전달) 시 원문을 상대방 언어(`counterpartLanguage`)로 번역해 `translatedCaption`에 자동으로 채움(번역 실패해도 원문 전달은 진행) | `{ transcriptId }` | `{ id, matchedMeetingPositionId, translatedText, translatedCaption, containsCriticalNumber, status: "DELIVERED"/"ON_HOLD" }` |
 | ✅ | GET | `/meetings/:id/meeting-logs` | 미팅 로그 조회 (사후검토용) | - | `meetingLog[]` |
 
@@ -122,6 +123,7 @@
 | ✅ | POST | `/meeting-logs/:id/review-actions` | 승인/수정/철회/재보류 (RE_HELD 시 hold_item 자동 생성) | `{ action, note? }` (`APPROVED`\|`REVISED`\|`WITHDRAWN`\|`RE_HELD`) | `{ id, meetingLogId, action, resultingHoldItemId, note, ... }` |
 | ✅ | POST | `/required-reviews?meetingLogId=` | 질문 참여자가 필수 검토 지정 | - | `{ id, meetingLogId, designatedBy, status: "CONDITIONAL", ... }` |
 | ✅ | PATCH | `/required-reviews/:id` | 답변 작성자 확인 처리 (조건부합의 → 확정) | - | `{ id, status: "CONFIRMED", reviewedBy, reviewedAt }` |
+| ✅ | GET | `/meetings/:id/required-reviews` | 미팅에 걸린 필수 검토 항목 전체 조회 (사후검토 화면용) | - | `requiredReview[]` |
 
 ---
 

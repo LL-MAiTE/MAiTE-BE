@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,6 +29,11 @@ public class ReviewController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<RequiredReviewResponse> createRequiredReview(@RequestParam UUID meetingLogId) {
         return ApiResponse.ok(reviewService.createRequiredReview(meetingLogId));
+    }
+
+    @GetMapping("/meetings/{id}/required-reviews")
+    public ApiResponse<List<RequiredReviewResponse>> getRequiredReviews(@PathVariable UUID id) {
+        return ApiResponse.ok(reviewService.getRequiredReviews(id));
     }
 
     @PatchMapping("/required-reviews/{id}")
