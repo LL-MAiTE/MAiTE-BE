@@ -41,6 +41,11 @@ public class AgendaController {
         return ApiResponse.ok(agendaService.selectReferenceDocuments(id, request));
     }
 
+    @GetMapping("/agendas/{id}/reference-documents")
+    public ApiResponse<List<AgendaReferenceDocumentResponse>> getReferenceDocuments(@PathVariable UUID id) {
+        return ApiResponse.ok(agendaService.getReferenceDocuments(id));
+    }
+
     @PatchMapping("/agenda-reference-documents/{id}")
     public ApiResponse<AgendaReferenceDocumentResponse> updateReferenceDocument(
             @PathVariable UUID id,

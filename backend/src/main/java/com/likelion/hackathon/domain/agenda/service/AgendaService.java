@@ -102,6 +102,17 @@ public class AgendaService {
         return saved.stream().map(AgendaReferenceDocumentResponse::from).toList();
     }
 
+    /** 이 안건에 등록된 참조 문서 전체(제외된 것 포함)를 가져온다. 회의 준비 화면을 새로
+     * 열었을 때 "참고 문서" 체크 상태를 정확히 복원하는 데 쓴다 — 지금까지는 문서 선택
+     * 직후 응답으로만 알 수 있었고, 다시 조회하는 길이 없었다. */
+    @Transactional(readOnly = true)
+    public List<AgendaReferenceDocumentResponse> getReferenceDocuments(UUID agendaId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Agenda agenda = getAgendaAndVerify(agendaId, userId);
+        return refDocRepository.findAllByAgenda(agenda).stream()
+                .map(AgendaReferenceDocumentResponse::from).toList();
+    }
+
     @Transactional
     public AgendaReferenceDocumentResponse updateReferenceDocument(UUID refDocId, UpdateReferenceDocumentRequest request) {
         UUID userId = SecurityUtil.getCurrentUserId();
