@@ -128,7 +128,7 @@ public class AgendaService {
         List<OpenAiService.DraftPosition> aiDrafts = openAiService.generateDraftPositions(agenda, refDocs);
         List<Position> drafts = aiDrafts.isEmpty()
                 ? generateMockPositions(agenda, refDocs)
-                : aiDrafts.stream().map(d -> toPosition(agenda, refDocs.get(0), d)).toList();
+                : aiDrafts.stream().map(d -> toPosition(agenda, refDocs, d)).toList();
 
         positionRepository.saveAll(drafts);
         agenda.updateStatus(AgendaStatus.PREPARING);
@@ -246,19 +246,29 @@ public class AgendaService {
         }
     }
 
-    private Position toPosition(Agenda agenda, AgendaReferenceDocument ref, OpenAiService.DraftPosition d) {
+    // ⚠️ 예전엔 어떤 문서가 실제 근거인지 안 물어보고 항상 refDocs.get(0)으로 고정했었다
+    // (실제 버그 — 여러 문서를 골라도 첫 번째 문서만 근거로 기록됨). 이제 AI가 응답한
+    // sourceDocumentTitle로 실제 근거 문서를 찾는다. 못 찾으면(제목 불일치, 또는 애초에
+    // 근거 문서가 없는 안건이면) sourceDocument는 null로 남긴다.
+    private Position toPosition(Agenda agenda, List<AgendaReferenceDocument> refDocs, OpenAiService.DraftPosition d) {
         List<String> activeFields = new ArrayList<>();
         if (d.answer() != null) activeFields.add("answer");
         if (d.preference() != null) activeFields.add("preference");
         if (d.concessionRange() != null) activeFields.add("concessionRange");
         if (d.dealbreaker() != null) activeFields.add("dealbreaker");
 
+        SourceDocument matchedDoc = d.sourceDocumentTitle() == null ? null : refDocs.stream()
+                .map(AgendaReferenceDocument::getSourceDocument)
+                .filter(doc -> d.sourceDocumentTitle().equals(doc.getTitle()))
+                .findFirst()
+                .orElse(null);
+
         return Position.builder()
                 .agenda(agenda)
                 .topic(d.topic())
                 .questionText(d.questionText())
                 .generatedBy(GeneratedBy.AI_DRAFT)
-                .sourceDocument(ref.getSourceDocument())
+                .sourceDocument(matchedDoc)
                 .activeFields(activeFields)
                 .answer(d.answer())
                 .preference(d.preference())

@@ -39,65 +39,117 @@ public class OpenAiService {
             String concessionRange,
             String dealbreaker,
             Integer priority,
-            String confidenceLevel // "DOCUMENT_BASED" | "ESTIMATED"
+            String confidenceLevel, // "DOCUMENT_BASED" | "ESTIMATED"
+            String sourceDocumentTitle // 근거 문서 제목(핵심 맥락 문서는 절대 여기 안 옴). 없으면 null.
     ) {}
 
     /**
-     * 참조 문서 기반으로 협상 안건 초안 생성
+     * 참조 문서 기반으로 협상 안건 초안 생성.
+     *
+     * ⚠️ 예전 프롬프트는 "3~5개 생성하세요"로 개수를 강제하고, 핵심 맥락(isCoreContext)
+     * 문서를 구분 없이 그냥 다 섞어 넣었고, "문서에 없으면 만들지 마라"는 지시가 약했다 —
+     * 프론트 ai-core/generateDraftPositions.ts(이미 실제 API로 검증된 프롬프트)의 규칙을
+     * 그대로 옮겨왔다: (1) 질문 성격에 맞는 필드만 채움, (2) 근거 없으면 안건 자체를 안
+     * 만듦(개수 강제 없음, 빈 배열 허용), (3) 핵심 맥락 문서는 큰 틀 참고용일 뿐 직접
+     * 근거·sourceDocumentTitle로 안 씀, (4) 관련성 낮은 안건보다 적은 개수를 우선.
+     * 또한 예전엔 어떤 문서가 근거인지 안 물어보고 항상 refDocs.get(0)으로 고정했었는데
+     * (실제 버그), 이제 sourceDocumentTitle을 물어봐서 실제 근거 문서를 정확히 연결한다.
      */
     public List<DraftPosition> generateDraftPositions(Agenda agenda, List<AgendaReferenceDocument> refDocs) {
-        StringBuilder docContent = new StringBuilder();
-        for (AgendaReferenceDocument ref : refDocs) {
-            String content = ref.getSourceDocument().getContent();
-            if (content != null && !content.isBlank()) {
-                docContent.append("=== ").append(ref.getSourceDocument().getTitle()).append(" ===\n");
-                docContent.append(content, 0, Math.min(content.length(), 1500)).append("\n\n");
-            }
+        List<AgendaReferenceDocument> coreDocs = refDocs.stream()
+                .filter(r -> r.getSourceDocument().isCoreContext()).toList();
+        List<AgendaReferenceDocument> otherDocs = refDocs.stream()
+                .filter(r -> !r.getSourceDocument().isCoreContext()).toList();
+
+        StringBuilder coreContent = new StringBuilder();
+        for (AgendaReferenceDocument ref : coreDocs) {
+            appendDoc(coreContent, ref);
+        }
+        StringBuilder otherContent = new StringBuilder();
+        for (AgendaReferenceDocument ref : otherDocs) {
+            appendDoc(otherContent, ref);
         }
 
-        String userPrompt = String.format("""
-                회의 제목: %s
-                회의 목적: %s
-                상대방 국가: %s
+        String systemPrompt = """
+                당신은 "특기전력" 서비스의 안건 초안 생성 엔진입니다. 특기전력은 시차가 큰
+                글로벌 팀이 실시간 회의 없이도 협업할 수 있도록, 답변 작성자가 사전에 승인한
+                내용만 AI가 상대방에게 대신 전달하는 서비스입니다.
 
-                참고 문서:
-                %s
+                당신의 역할은 답변 작성자가 업로드한 문서를 근거로, 다가올 회의에서 상대방이
+                물어볼 만한 "예상 질문(안건)"과 그에 대한 "답변 초안"을 미리 만들어 두는
+                것입니다. 답변 작성자는 이 초안을 확인하고 승인/수정만 하면 됩니다 — 당신의
+                결과물은 최종 발화가 아니라 사람이 검토할 "초안"입니다.
 
-                위 내용을 바탕으로 협상에서 우리 측이 다뤄야 할 안건을 3~5개 생성하세요.
-                반드시 아래 JSON 형식으로 응답하세요:
+                # 반드시 지켜야 할 핵심 규칙
+
+                ## 규칙 1: 질문 성격에 맞는 필드만 채워라
+                일정/기한 질문 → preference/concessionRange/scheduleConstraint 위주.
+                계약/조건/범위 질문 → dealbreaker까지 포함. 우선순위가 문서에서 드러날 때만
+                priority를 채운다. 단순 사실 확인성 질문이면 answer 하나만 채워도 된다.
+                무관한 필드는 반드시 null로 남기고 activeFields에도 포함하지 마라. 모든
+                필드를 습관적으로 채우는 것은 이 기능의 핵심 규칙 위반이다.
+
+                ## 규칙 2: 문서에 없는 내용은 추정하지 말고 만들지 마라
+                직접적이고 명확한 근거가 있으면 confidenceLevel: "DOCUMENT_BASED".
+                직접 근거는 없지만 문맥상 합리적으로 추론 가능한 경우에만 "ESTIMATED".
+                근거가 전혀 없는 안건은 만들지 마라 — "그럴듯해 보이는" 질문을 지어내는 것
+                자체가 금지다. 차라리 안건 개수가 적어지는 게 낫다.
+
+                ## 규칙 3: 핵심 맥락 문서는 큰 틀만 잡는 데 쓴다
+                "핵심 맥락 문서"는 팀 구성, 프로젝트 목적, 배경 같은 큰 틀을 이해하는 데만
+                참고하라. 구체적인 답변, 협상 조건, 일정, 수치는 반드시 "그 외 참고 문서"에서
+                찾아라. 핵심 맥락 문서의 제목을 sourceDocumentTitle로 지정하지 마라.
+
+                ## 규칙 4: 개수보다 관련성과 근거성을 우선해라
+                각 안건은 반드시 회의 목적과 직접 관련 있어야 한다. 일반적으로 소수의 핵심
+                안건만 생성하고, 비슷한 안건은 하나로 통합해라. 최소 개수는 없다 — 적합한
+                안건이 없으면 positions를 빈 배열로 반환해라. 안건 수를 늘리는 것보다
+                근거가 약한 안건을 제외하는 것을 항상 우선해라.
+
+                ## 규칙 5: topic을 제외한 모든 텍스트는 한국어로 작성해라
+                topic만 예외로 영문 snake_case를 쓴다(버전관리용 식별자이기 때문).
+
+                # 출력 형식
+                반드시 아래 JSON 하나만 출력해라. 그 외 텍스트는 절대 출력하지 마라.
                 {
                   "positions": [
                     {
-                      "topic": "안건 주제 (짧게)",
-                      "questionText": "상대방이 물어볼 수 있는 질문",
-                      "answer": "우리 측 공식 답변",
-                      "preference": "선호하는 조건",
-                      "concessionRange": "양보 가능한 범위",
-                      "dealbreaker": "절대 양보 불가 조건",
-                      "priority": 1,
-                      "confidenceLevel": "DOCUMENT_BASED"
+                      "topic": "snake_case 영문 식별자, 예: api_deadline",
+                      "questionText": "예상 질문",
+                      "answer": "string 또는 null",
+                      "preference": "string 또는 null",
+                      "concessionRange": "string 또는 null",
+                      "dealbreaker": "string 또는 null",
+                      "priority": "number 또는 null",
+                      "confidenceLevel": "DOCUMENT_BASED 또는 ESTIMATED",
+                      "sourceDocumentTitle": "근거가 된 '그 외 참고 문서'의 제목, 없으면 null"
                     }
                   ]
                 }
-                priority는 1(최고)~5(낮음) 숫자입니다. 없으면 null.
-                문서에서 확인 불가한 항목은 null로 두세요.
-                confidenceLevel은 이 안건의 answer/preference/concessionRange/dealbreaker가
-                실제로 참고 문서에 명시된 내용에 근거하면 "DOCUMENT_BASED",
-                문서에 직접적인 근거가 없어서 일반적인 협상 관행이나 추론으로
-                채운 것이면 "ESTIMATED"로 표시하세요. 하나라도 추정이 섞여있으면
-                ESTIMATED로 표시하세요.
+                """;
+
+        String userPrompt = String.format("""
+                # 회의 정보
+                - 회의 이름: %s
+                - 회의 목적: %s
+                - 상대방 정보: %s
+
+                # 핵심 맥락 문서 (큰 틀 참고용 — 구체적 답변 근거로 쓰지 말 것)
+                %s
+
+                # 그 외 참고 문서 (구체적 답변 근거는 여기서 찾을 것)
+                %s
+
+                위 문서들을 근거로, 이번 회의에서 상대방이 물어볼 만한 안건 초안을 생성해라.
                 """,
                 agenda.getTitle(),
                 agenda.getPurpose() != null ? agenda.getPurpose() : "-",
                 agenda.getCounterpartCountry() != null ? agenda.getCounterpartCountry() : "-",
-                docContent
+                coreDocs.isEmpty() ? "(없음)" : coreContent.toString().trim(),
+                otherDocs.isEmpty() ? "(없음)" : otherContent.toString().trim()
         );
 
-        String responseJson = callChatApi(
-                "당신은 국제 협상 전문가입니다. 주어진 문서를 분석하여 협상 안건을 JSON으로 생성합니다.",
-                userPrompt
-        );
-
+        String responseJson = callChatApi(systemPrompt, userPrompt);
         if (responseJson == null) return List.of();
 
         try {
@@ -113,7 +165,8 @@ public class OpenAiService {
                         text(p, "concessionRange"),
                         text(p, "dealbreaker"),
                         p.path("priority").isNull() ? null : p.path("priority").asInt(),
-                        text(p, "confidenceLevel")
+                        text(p, "confidenceLevel"),
+                        text(p, "sourceDocumentTitle")
                 ));
             }
             return result;
@@ -121,6 +174,13 @@ public class OpenAiService {
             log.error("Failed to parse OpenAI draft positions response: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    private void appendDoc(StringBuilder sb, AgendaReferenceDocument ref) {
+        String content = ref.getSourceDocument().getContent();
+        if (content == null || content.isBlank()) return;
+        sb.append("### ").append(ref.getSourceDocument().getTitle()).append("\n");
+        sb.append(content).append("\n\n");
     }
 
     /**
