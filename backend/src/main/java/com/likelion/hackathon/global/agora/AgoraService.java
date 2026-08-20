@@ -36,10 +36,15 @@ public class AgoraService {
      * LLM은 우리 Custom LLM 엔드포인트(/agora/chat-completions)로 교체되어 있음.
      * ASR: Deepgram(Agora Managed Key), TTS: MiniMax(Agora Managed Key).
      *
+     * @param counterpartLanguage agenda.counterpartLanguage(BCP-47, 예: "en-US"). null/빈 값이면
+     *                             한국어로 폴백(AgoraLanguage.from 참고) — ASR 언어/TTS 목소리를
+     *                             여기서 정한다. LLM이 실제로 그 언어로 답하는지는 별개로
+     *                             MatchIntentService가 같은 값을 받아서 처리한다.
      * @return agentId (나중에 종료할 때 사용)
      */
     @SuppressWarnings("unchecked")
-    public String startConversationalAI(String channelName, String greetingMessage) {
+    public String startConversationalAI(String channelName, String greetingMessage, String counterpartLanguage) {
+        AgoraLanguage language = AgoraLanguage.from(counterpartLanguage);
         String url = String.format(CONV_AI_BASE, props.getAppId());
 
         String agentToken = "";
@@ -58,30 +63,28 @@ public class AgoraService {
         Map<String, Object> llm = new LinkedHashMap<>();
         llm.put("url", callbackBase + "/agora/chat-completions?meetingId=" + channelName);
         llm.put("greeting_message", greetingMessage);
-        llm.put("failure_message", "확인하는 데 시간이 조금 걸리고 있습니다. 잠시만 기다려주세요.");
+        llm.put("failure_message", language.getHoldMessage());
 
-        // ASR: Deepgram (Agora Managed Key)
+        // ASR: Deepgram (Agora Managed Key) — 상대방이 실제로 말하는 언어(agenda.counterpartLanguage)
+        // 기준. 예전엔 여기가 "ko"로 하드코딩돼있어서, 위저드에서 "영어"를 골라도 Deepgram이
+        // 계속 한국어 모델로 영어 발화를 들으려다 실패하는 문제가 있었다(직접 확인된 버그).
         Map<String, Object> asrParams = new LinkedHashMap<>();
         asrParams.put("url", "wss://api.deepgram.com/v1/listen");
         asrParams.put("model", "nova-3");
         asrParams.put("keyterm", "");
-        asrParams.put("language", "ko");
+        asrParams.put("language", language.getDeepgramCode());
 
         Map<String, Object> asr = new LinkedHashMap<>();
         asr.put("vendor", "deepgram");
         asr.put("credential_mode", "managed");
         asr.put("resource_id", props.getAsrResourceId());
-        asr.put("language", "ko");  // Agora 최상위 언어 필드 — params.language(ko)와 어긋나 있던 걸(예전 영어 전용 잔재로 추정) 통일
+        asr.put("language", language.getDeepgramCode());  // Agora 최상위 언어 필드 — params.language와 항상 맞춘다.
         asr.put("params", asrParams);
         asr.put("model", "nova-3");
 
-        // TTS: MiniMax (Agora Managed Key)
-        // ⚠️ 예전엔 English_radiant_girl(영어 전용 목소리)이 박혀있었음 — AI는 한국어로
-        // 대답하는데 목소리 모델이 영어용이라 발음이 어색했던 게 이것 때문이었을 가능성 높음.
-        // 한국어 목소리로 교체(협상 대리인 톤에 맞게 차분한 쪽으로 선택, 필요하면 교체 가능:
-        // Korean_GentleWoman/Korean_IntellectualMan/Korean_ConsiderateSenior 등도 있음).
+        // TTS: MiniMax (Agora Managed Key) — 언어별 voice_id는 AgoraLanguage에서 관리.
         Map<String, Object> voiceSetting = new LinkedHashMap<>();
-        voiceSetting.put("voice_id", "Korean_CalmLady");
+        voiceSetting.put("voice_id", language.getTtsVoiceId());
 
         Map<String, Object> ttsParams = new LinkedHashMap<>();
         ttsParams.put("url", "wss://api.minimax.io/ws/v1/t2a_v2");
