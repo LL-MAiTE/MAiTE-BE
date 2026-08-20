@@ -34,6 +34,12 @@ public class ProjectController {
         return ApiResponse.ok(projectService.getProject(id));
     }
 
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteProject(@PathVariable UUID id) {
+        projectService.delete(id);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/{id}/members")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ProjectMemberResponse> inviteMember(

@@ -20,6 +20,7 @@ public enum ErrorCode {
     PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다."),
     NOT_PROJECT_MEMBER(HttpStatus.FORBIDDEN, "프로젝트 멤버가 아닙니다."),
     ALREADY_PROJECT_MEMBER(HttpStatus.CONFLICT, "이미 프로젝트 멤버입니다."),
+    PROJECT_HAS_AGENDAS(HttpStatus.CONFLICT, "이미 회의 준비가 시작된 프로젝트는 삭제할 수 없습니다. 관련 회의를 먼저 정리해주세요."),
 
     // Document
     SOURCE_CONNECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "연동 소스를 찾을 수 없습니다."),
