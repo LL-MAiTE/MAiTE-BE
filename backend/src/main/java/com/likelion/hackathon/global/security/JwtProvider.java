@@ -16,7 +16,9 @@ import java.util.UUID;
 public class JwtProvider {
 
     private final SecretKey secretKey;
-    private static final long EXPIRATION_MS = 1000L * 60 * 60 * 24 * 7; // 7일
+    // 프론트가 로그인 화면 없이 고정 서비스 계정 토큰 하나로 계속 호출하는 구조라
+    // (frontend/lib/backendApi.ts 참고), 데모 기간 내내 만료로 끊기지 않도록 넉넉하게 잡음.
+    private static final long EXPIRATION_MS = 1000L * 60 * 60 * 24 * 30; // 30일
 
     public JwtProvider(@Value("${jwt.secret}") String secret) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
