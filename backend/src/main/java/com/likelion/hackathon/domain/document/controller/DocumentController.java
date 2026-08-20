@@ -50,6 +50,12 @@ public class DocumentController {
         return ApiResponse.ok(documentService.getDocument(id));
     }
 
+    @DeleteMapping("/documents/{id}")
+    public ApiResponse<Void> deleteDocument(@PathVariable UUID id) {
+        documentService.deleteDocument(id);
+        return ApiResponse.ok();
+    }
+
     @GetMapping("/projects/{id}/documents")
     public ApiResponse<List<SourceDocumentResponse>> getDocuments(@PathVariable UUID id) {
         return ApiResponse.ok(documentService.getDocuments(id));

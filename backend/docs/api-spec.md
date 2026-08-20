@@ -43,6 +43,7 @@
 | ✅ | POST | `/projects/:id/documents` | md 파일 직접 업로드 | `{ title, content }` | `{ id, projectId, title, isCoreContext, lastModifiedAt, ... }` |
 | ✅ | PATCH | `/documents/:id` | 핵심 맥락 md 지정 등 문서 속성 수정 | `{ isCoreContext }` | `{ id, projectId, title, isCoreContext, ... }` |
 | ✅ | GET | `/documents/:id` | 문서 단건 조회 (content 본문 포함) | - | `{ id, projectId, connectionId, title, path, sourceUrl, content, isCoreContext, lastModifiedAt, syncedAt }` |
+| ✅ | DELETE | `/documents/:id` | 문서 삭제. 안건의 참조 문서로 이미 쓰이고 있으면 409(DOCUMENT_IN_USE)로 거부 | - | `{ success: true }` |
 | ✅ | GET | `/projects/:id/documents` | 프로젝트 문서 목록 (핵심맥락 우선 정렬). **content(본문)는 포함 안 됨** — 본문 필요하면 `GET /documents/:id` 사용 | - | `sourceDocument[]` |
 
 ---
