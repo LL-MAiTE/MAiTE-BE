@@ -20,11 +20,13 @@ public enum ErrorCode {
     PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다."),
     NOT_PROJECT_MEMBER(HttpStatus.FORBIDDEN, "프로젝트 멤버가 아닙니다."),
     ALREADY_PROJECT_MEMBER(HttpStatus.CONFLICT, "이미 프로젝트 멤버입니다."),
+    PROJECT_HAS_AGENDAS(HttpStatus.CONFLICT, "이미 회의 준비가 시작된 프로젝트는 삭제할 수 없습니다. 관련 회의를 먼저 정리해주세요."),
 
     // Document
     SOURCE_CONNECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "연동 소스를 찾을 수 없습니다."),
     SOURCE_DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "문서를 찾을 수 없습니다."),
     DOCUMENT_NOT_IN_PROJECT(HttpStatus.BAD_REQUEST, "문서가 해당 프로젝트에 속하지 않습니다."),
+    DOCUMENT_IN_USE(HttpStatus.CONFLICT, "이미 안건의 참조 문서로 사용 중인 문서라 삭제할 수 없습니다. 참조 문서에서 제외한 뒤 다시 시도하세요."),
     GITHUB_REPO_ACCESS_FAILED(HttpStatus.BAD_REQUEST, "GitHub 저장소에 접근할 수 없습니다. accessToken 또는 저장소 이름(owner/repo)을 확인하세요."),
     NOTION_PAGE_ACCESS_FAILED(HttpStatus.BAD_REQUEST, "Notion 페이지에 접근할 수 없습니다. accessToken이 맞는지, 해당 페이지에 통합(integration)이 공유되어 있는지 확인하세요."),
 

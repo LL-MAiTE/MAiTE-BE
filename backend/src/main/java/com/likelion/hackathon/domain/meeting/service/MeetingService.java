@@ -125,7 +125,7 @@ public class MeetingService {
         // Agora Conversational AI 에이전트 시작
         try {
             String agentId = agoraService.startConversationalAI(
-                    meetingId.toString(), greeting);
+                    meetingId.toString(), greeting, agenda.getCounterpartLanguage());
             meeting.setAgoraAgentId(agentId);
             log.info("Meeting {} AI agent started: {}", meetingId, agentId);
         } catch (Exception e) {

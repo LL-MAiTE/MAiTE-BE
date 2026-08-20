@@ -20,4 +20,7 @@ public class Project extends BaseTimeEntity {
 
     @Column(nullable = false)
     private String name;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 }

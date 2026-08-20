@@ -1,6 +1,7 @@
 package com.likelion.hackathon.global.agora;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.likelion.hackathon.domain.agenda.entity.Agenda;
 import com.likelion.hackathon.domain.agenda.entity.Position;
 import com.likelion.hackathon.domain.agenda.entity.enums.ApprovalStatus;
 import com.likelion.hackathon.domain.agenda.entity.enums.GeneratedBy;
@@ -38,11 +39,12 @@ import java.util.*;
 @RequiredArgsConstructor
 public class AgoraChatCompletionsController {
 
-    private static final String HOLD_MESSAGE = "확인이 필요한 사항입니다. 내부 검토 후 답변드리겠습니다.";
-
-    private static final String SMALL_TALK_FALLBACK = "네, 안녕하세요.";
-
-    private static final String META_FALLBACK = "죄송합니다, 다시 한 번 말씀해 주시겠어요?";
+    // meeting/agenda를 아직 못 찾았거나(잘못된 meetingId 등) 처리 중 예외가 나서 상대방
+    // 언어를 알 수 없는 극단적 케이스에서만 쓰는 한국어 기본값. 정상 흐름에서는 항상
+    // AgoraLanguage.from(agenda.getCounterpartLanguage())가 돌려주는 언어별 문구를 쓴다 —
+    // 예전엔 이 세 문구가 전부 하드코딩이라 영어 상대방과 통화해도 보류/스몰토크 응답이
+    // 한국어로 나가는 문제가 있었다(사용자가 직접 발견).
+    private static final String HOLD_MESSAGE = AgoraLanguage.KO.getHoldMessage();
 
     // TTS가 "1,000"처럼 자릿수 구분 쉼표가 들어간 숫자를 하나씩 끊어 읽는 문제가 있어서
     // (예: "1,000개" → "일, 영개"), 프롬프트로도 쉼표를 쓰지 말라고 지시했지만 LLM이 실수로
@@ -117,19 +119,23 @@ public class AgoraChatCompletionsController {
                 positions = buildDemoPositions();
             }
 
+            Agenda agenda = meetingOpt.get().getAgenda();
+            AgoraLanguage language = AgoraLanguage.from(agenda != null ? agenda.getCounterpartLanguage() : null);
+
             List<Map<String, String>> history = extractConversationHistory(body);
 
             // 분류 + 응답 생성을 LLM 호출 1번으로 처리한다 — 예전엔 "분류 콜 + 생성 콜"을
             // 매 턴마다 순차로 두 번 왕복해서 그 지연이 그대로 체감 지연("한 박자 늦다")으로
             // 쌓였다. 지금은 분류 결과와 그 분류에 맞는 응답을 한 JSON으로 같이 받는다.
-            MatchIntentService.Resolution resolution = matchIntentService.resolve(question, positions, history);
-            log.info("[chat-completions] category={} topic={}", resolution.category(), resolution.matchedTopic());
+            MatchIntentService.Resolution resolution = matchIntentService.resolve(question, positions, history, language);
+            log.info("[chat-completions] category={} topic={} language={}",
+                    resolution.category(), resolution.matchedTopic(), language);
 
             // 인사·잡담: 안건과 무관하니 hold 문구를 붙일 이유가 없다 — 자연스럽게 짧게 응대만
             // 하고, 혹시 LLM이 실수로 숫자/날짜를 섞으면(비즈니스 내용 유출) 안전한 문구로 대체.
             if (resolution.isSmallTalk()) {
                 if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
-                    return ResolvedTurn.of(SMALL_TALK_FALLBACK);
+                    return ResolvedTurn.of(language.getSmallTalkFallback());
                 }
                 return ResolvedTurn.of(resolution.response());
             }
@@ -139,7 +145,7 @@ public class AgoraChatCompletionsController {
             // "내부 검토 필요" 톤을 붙일 이유가 없다 — 자연스럽게 바로 응대.
             if (resolution.isMeta()) {
                 if (resolution.response() == null || guardrail.containsFigure(resolution.response())) {
-                    return ResolvedTurn.of(META_FALLBACK);
+                    return ResolvedTurn.of(language.getMetaFallback());
                 }
                 return ResolvedTurn.of(resolution.response());
             }
@@ -149,7 +155,7 @@ public class AgoraChatCompletionsController {
             // 실제 협상 내용이 못 넘어갔다는 뜻이므로 보류함/알림 대상이다.
             if (!resolution.matched()) {
                 String text = (resolution.response() == null || guardrail.containsFigure(resolution.response()))
-                        ? HOLD_MESSAGE : resolution.response();
+                        ? language.getHoldMessage() : resolution.response();
                 return new ResolvedTurn(text, true, null, "매칭된 안건 없음: " + question);
             }
 
@@ -159,7 +165,7 @@ public class AgoraChatCompletionsController {
                     .findFirst()
                     .orElse(null);
 
-            if (position == null) return ResolvedTurn.of(HOLD_MESSAGE);
+            if (position == null) return ResolvedTurn.of(language.getHoldMessage());
 
             // 마지막 방어선: 생성된 문장이 실제로 dealbreaker/양보범위를 넘는지 결정론적으로
             // 재검증. 넘으면 그 문장은 버리고 원본(승인된) answer로 안전하게 대체한다.
@@ -168,10 +174,15 @@ public class AgoraChatCompletionsController {
                 return new ResolvedTurn(verified, false, position.getId(), null);
             }
 
+            // ⚠️ position.getAnswer()는 항상 한국어다(안건 초안 생성 규칙상 topic 외 모든
+            // 텍스트 필드가 한국어로 저장됨) — 이 폴백은 guardrail이 LLM 생성 문장을 거부한
+            // 드문 경우에만 타므로, 비한국어 상대방에게는 원문(한국어)이 그대로 나갈 수 있는
+            // 잔여 한계가 있다(알려진 이슈, 별도 개선 필요 — 실시간 번역 호출을 추가하면
+            // 이 경로의 지연이 늘어나서 지금은 보류).
             log.warn("[chat-completions] guardrail rejected generated response, falling back to raw answer. topic={}",
                     position.getTopic());
             return new ResolvedTurn(
-                    position.getAnswer() != null ? position.getAnswer() : HOLD_MESSAGE,
+                    position.getAnswer() != null ? position.getAnswer() : language.getHoldMessage(),
                     false, position.getId(), null);
 
         } catch (IllegalArgumentException e) {

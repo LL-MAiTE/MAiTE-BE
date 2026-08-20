@@ -92,11 +92,6 @@ public class MeetingSystemPromptBuilder {
     }
 
     public String buildGreeting(Agenda agenda) {
-        String lang = agenda.getCounterpartLanguage();
-        if (lang != null && lang.toLowerCase().contains("en")) {
-            return "Hello. I'm the AI negotiation representative for " + agenda.getTitle()
-                    + ". Shall we begin the meeting?";
-        }
-        return "안녕하세요. '" + agenda.getTitle() + "' 회의를 위한 AI 협상 대리인입니다. 회의를 시작하겠습니다.";
+        return AgoraLanguage.from(agenda.getCounterpartLanguage()).buildGreeting(agenda.getTitle());
     }
 }

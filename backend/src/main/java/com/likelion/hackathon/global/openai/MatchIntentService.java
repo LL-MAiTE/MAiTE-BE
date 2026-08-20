@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.likelion.hackathon.domain.agenda.entity.Position;
 import com.likelion.hackathon.domain.meeting.entity.MeetingPosition;
+import com.likelion.hackathon.global.agora.AgoraLanguage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,7 +64,8 @@ public class MatchIntentService {
     }
 
     public Resolution resolve(String question, List<MeetingPosition> meetingPositions,
-                               List<Map<String, String>> conversationHistory) {
+                               List<Map<String, String>> conversationHistory,
+                               AgoraLanguage responseLanguage) {
         if (meetingPositions.isEmpty()) {
             return new Resolution(Category.OUT_OF_SCOPE, null, null, null);
         }
@@ -90,9 +92,12 @@ public class MatchIntentService {
         }
 
         String systemPrompt = """
-                당신은 협상 회의에서 답변 작성자를 대리하는 AI 협상 대리인입니다. 상대방 발화를
-                분석해서 아래 네 카테고리 중 하나로 분류하는 동시에, 그 분류에 맞는 응답까지
-                자연스러운 한국어 구어체로 함께 생성하세요. 실제 협상가와 대화하는 것 같은
+                당신은 협상 회의에서 답변 작성자를 대리하는 AI 협상 대리인입니다. 상대방은
+                %s로 말하고 있고, 상대방 발화를 분석해서 아래 네 카테고리 중 하나로 분류하는
+                동시에, 그 분류에 맞는 응답까지 자연스러운 %s 구어체로 함께 생성하세요.
+                (분류 판단과 이 지침 자체는 한국어로 되어 있지만, response 필드에 실제로
+                쓰는 문장은 반드시 %s로만 작성하세요 — 다른 언어를 섞지 마세요. 이 응답은
+                그대로 음성 합성(TTS)으로 상대방에게 읽힙니다.) 실제 협상가와 대화하는 것 같은
                 자연스러운 대화 품질을 내되, 비즈니스 내용에 대해서는 절대 임의로 결정하지 않습니다.
 
                 [카테고리]
@@ -139,8 +144,14 @@ public class MatchIntentService {
                 %s
 
                 반드시 JSON으로만 응답:
-                {"category": "MATCHED"|"SMALL_TALK"|"META"|"OUT_OF_SCOPE", "matchedTopic": "MATCHED일 때 그 안건의 topic값, 아니면 null", "response": "위 원칙에 따른 실제 응답 문장"}
-                """.formatted(positionsSb);
+                {"category": "MATCHED"|"SMALL_TALK"|"META"|"OUT_OF_SCOPE", "matchedTopic": "MATCHED일 때 그 안건의 topic값, 아니면 null", "response": "위 원칙에 따른 실제 응답 문장 (반드시 %s로 작성)"}
+                """.formatted(
+                responseLanguage.getDisplayName(),
+                responseLanguage.getDisplayName(),
+                responseLanguage.getDisplayName(),
+                positionsSb,
+                responseLanguage.getDisplayName()
+        );
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
