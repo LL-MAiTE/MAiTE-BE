@@ -188,38 +188,9 @@ public class ProjectService {
         Project project = getProjectAndVerifyMember(projectId, userId);
 
         List<Agenda> agendas = agendaRepository.findAllByProjectOrderByCreatedAtDesc(project);
-
         for (Agenda agenda : agendas) {
-            List<Meeting> meetings = meetingRepository.findAllByAgenda(agenda);
-
-            for (Meeting meeting : meetings) {
-                // 1. hold_items — meeting_log, number_confirmation, transcript를 FK로 참조하므로 먼저 삭제
-                holdItemRepository.deleteAll(holdItemRepository.findAllByMeeting(meeting));
-
-                // 2. meeting_log 종속 레코드 (number_confirmations, required_reviews, review_actions)
-                List<MeetingLog> meetingLogs = meetingLogRepository.findAllByMeetingOrderByTranscriptSpokenAt(meeting);
-                for (MeetingLog log : meetingLogs) {
-                    numberConfirmationRepository.findByMeetingLog(log).ifPresent(numberConfirmationRepository::delete);
-                    requiredReviewRepository.deleteAll(requiredReviewRepository.findAllByMeetingLog(log));
-                    reviewActionRepository.deleteAll(reviewActionRepository.findAllByMeetingLog(log));
-                }
-
-                // 3. meeting_logs — transcript, meeting_positions를 FK로 참조하므로 먼저 삭제
-                meetingLogRepository.deleteAll(meetingLogs);
-
-                // 4. meeting_positions, transcripts, coordination_records
-                meetingPositionRepository.deleteAll(meetingPositionRepository.findAllByMeeting(meeting));
-                transcriptRepository.deleteAll(transcriptRepository.findAllByMeetingOrderBySpokenAt(meeting));
-                coordinationRecordRepository.deleteAll(coordinationRecordRepository.findAllByMeeting(meeting));
-            }
-
-            meetingRepository.deleteAll(meetings);
-
-            // agenda 종속 레코드
-            agendaReferenceDocumentRepository.deleteAll(agendaReferenceDocumentRepository.findAllByAgenda(agenda));
-            positionRepository.deleteAll(positionRepository.findAllByAgenda(agenda));
+            deleteAgendaCascade(agenda);
         }
-
         agendaRepository.deleteAll(agendas);
 
         // source_documents.connection_id가 source_connections를 참조하므로 문서를 먼저 지운다.
@@ -228,6 +199,43 @@ public class ProjectService {
         sourceConnectionRepository.deleteAll(sourceConnectionRepository.findAllByProject(project));
         projectMemberRepository.deleteAll(projectMemberRepository.findAllByProject(project));
         projectRepository.delete(project);
+    }
+
+    /**
+     * 안건 하나에 딸린 자식 레코드 전체를 지운다(안건 자체는 안 지움 — 호출부가 결정).
+     * AgendaService.deleteAgenda()(회의 하나만 지울 때)와 위 delete()(프로젝트 통째로
+     * 지울 때, 안건마다 반복 호출) 양쪽에서 같이 쓴다.
+     */
+    @Transactional
+    public void deleteAgendaCascade(Agenda agenda) {
+        List<Meeting> meetings = meetingRepository.findAllByAgenda(agenda);
+
+        for (Meeting meeting : meetings) {
+            // 1. hold_items — meeting_log, number_confirmation, transcript를 FK로 참조하므로 먼저 삭제
+            holdItemRepository.deleteAll(holdItemRepository.findAllByMeeting(meeting));
+
+            // 2. meeting_log 종속 레코드 (number_confirmations, required_reviews, review_actions)
+            List<MeetingLog> meetingLogs = meetingLogRepository.findAllByMeetingOrderByTranscriptSpokenAt(meeting);
+            for (MeetingLog log : meetingLogs) {
+                numberConfirmationRepository.findByMeetingLog(log).ifPresent(numberConfirmationRepository::delete);
+                requiredReviewRepository.deleteAll(requiredReviewRepository.findAllByMeetingLog(log));
+                reviewActionRepository.deleteAll(reviewActionRepository.findAllByMeetingLog(log));
+            }
+
+            // 3. meeting_logs — transcript, meeting_positions를 FK로 참조하므로 먼저 삭제
+            meetingLogRepository.deleteAll(meetingLogs);
+
+            // 4. meeting_positions, transcripts, coordination_records
+            meetingPositionRepository.deleteAll(meetingPositionRepository.findAllByMeeting(meeting));
+            transcriptRepository.deleteAll(transcriptRepository.findAllByMeetingOrderBySpokenAt(meeting));
+            coordinationRecordRepository.deleteAll(coordinationRecordRepository.findAllByMeeting(meeting));
+        }
+
+        meetingRepository.deleteAll(meetings);
+
+        // agenda 종속 레코드
+        agendaReferenceDocumentRepository.deleteAll(agendaReferenceDocumentRepository.findAllByAgenda(agenda));
+        positionRepository.deleteAll(positionRepository.findAllByAgenda(agenda));
     }
 
     public Project getProjectAndVerifyMember(UUID projectId, UUID userId) {

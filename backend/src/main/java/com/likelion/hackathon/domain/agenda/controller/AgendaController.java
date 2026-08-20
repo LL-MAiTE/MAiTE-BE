@@ -95,4 +95,10 @@ public class AgendaController {
         agendaService.deletePosition(id);
         return ApiResponse.ok();
     }
+
+    @DeleteMapping("/agendas/{id}")
+    public ApiResponse<Void> deleteAgenda(@PathVariable UUID id) {
+        agendaService.deleteAgenda(id);
+        return ApiResponse.ok();
+    }
 }

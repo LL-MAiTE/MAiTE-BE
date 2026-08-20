@@ -237,6 +237,20 @@ public class AgendaService {
         position.markNotLatest();
     }
 
+    /**
+     * 회의(안건) 하나를 자식 레코드 전체와 함께 지운다 — 프론트 "회의 삭제" 버튼이
+     * 지금까지 로컬 화면에서만 지우고 실제로는 안 지워서, 다른 브라우저/기기로
+     * 로그인하면(또는 이 프로젝트를 다시 열면) 지운 회의가 다시 나타나던 문제 수정.
+     * 프로젝트 통째로 지울 때 쓰는 cascade 로직(ProjectService)을 안건 하나 범위로 재사용.
+     */
+    @Transactional
+    public void deleteAgenda(UUID agendaId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Agenda agenda = getAgendaAndVerify(agendaId, userId);
+        projectService.deleteAgendaCascade(agenda);
+        agendaRepository.delete(agenda);
+    }
+
     private Agenda getAgendaAndVerify(UUID agendaId, UUID userId) {
         Agenda agenda = agendaRepository.findById(agendaId)
                 .orElseThrow(() -> new CustomException(ErrorCode.AGENDA_NOT_FOUND));
