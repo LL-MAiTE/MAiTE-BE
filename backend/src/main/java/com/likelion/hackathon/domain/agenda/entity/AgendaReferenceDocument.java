@@ -45,4 +45,8 @@ public class AgendaReferenceDocument {
     public void exclude() {
         this.excluded = true;
     }
+
+    public void include() {
+        this.excluded = false;
+    }
 }

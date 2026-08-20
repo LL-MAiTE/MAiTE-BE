@@ -108,8 +108,12 @@ public class AgendaService {
         AgendaReferenceDocument ref = refDocRepository.findById(refDocId)
                 .orElseThrow(() -> new CustomException(ErrorCode.AGENDA_REFERENCE_DOCUMENT_NOT_FOUND));
         projectService.getProjectAndVerifyMember(ref.getAgenda().getProject().getId(), userId);
+        // 예전엔 excluded=true로 켜는 것만 지원하고 다시 false로 되돌리는 길이 없었다
+        // (실제로는 문서 선택 체크박스를 다시 켰을 때 반영이 안 되는 버그였음).
         if (request.excluded()) {
             ref.exclude();
+        } else {
+            ref.include();
         }
         return AgendaReferenceDocumentResponse.from(ref);
     }
