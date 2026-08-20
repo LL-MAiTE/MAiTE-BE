@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface PositionRepository extends JpaRepository<Position, UUID> {
+    List<Position> findAllByAgenda(Agenda agenda);
     List<Position> findAllByAgendaAndIsLatestTrue(Agenda agenda);
     List<Position> findAllByAgendaAndIsLatestTrueAndApprovalStatusIn(
             Agenda agenda, List<ApprovalStatus> statuses);

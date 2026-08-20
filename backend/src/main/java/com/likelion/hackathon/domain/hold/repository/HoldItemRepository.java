@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface HoldItemRepository extends JpaRepository<HoldItem, UUID> {
+    List<HoldItem> findAllByMeeting(Meeting meeting);
     List<HoldItem> findAllByMeetingOrderByCreatedAtDesc(Meeting meeting);
     List<HoldItem> findAllByStatusAndDeliveredToCounterpartAtBefore(
             HoldItemStatus status, LocalDateTime threshold);

@@ -1,14 +1,29 @@
 package com.likelion.hackathon.domain.project.service;
 
+import com.likelion.hackathon.domain.agenda.entity.Agenda;
+import com.likelion.hackathon.domain.agenda.entity.Position;
+import com.likelion.hackathon.domain.agenda.repository.AgendaReferenceDocumentRepository;
+import com.likelion.hackathon.domain.agenda.repository.AgendaRepository;
+import com.likelion.hackathon.domain.agenda.repository.PositionRepository;
+import com.likelion.hackathon.domain.confirmation.repository.NumberConfirmationRepository;
 import com.likelion.hackathon.domain.document.repository.SourceConnectionRepository;
 import com.likelion.hackathon.domain.document.repository.SourceDocumentRepository;
-import com.likelion.hackathon.domain.agenda.repository.AgendaRepository;
+import com.likelion.hackathon.domain.hold.repository.CoordinationRecordRepository;
+import com.likelion.hackathon.domain.hold.repository.HoldItemRepository;
+import com.likelion.hackathon.domain.meeting.entity.Meeting;
+import com.likelion.hackathon.domain.meeting.entity.MeetingLog;
+import com.likelion.hackathon.domain.meeting.repository.MeetingLogRepository;
+import com.likelion.hackathon.domain.meeting.repository.MeetingPositionRepository;
+import com.likelion.hackathon.domain.meeting.repository.MeetingRepository;
+import com.likelion.hackathon.domain.meeting.repository.TranscriptRepository;
 import com.likelion.hackathon.domain.project.dto.*;
 import com.likelion.hackathon.domain.project.entity.Project;
 import com.likelion.hackathon.domain.project.entity.ProjectMember;
 import com.likelion.hackathon.domain.project.entity.enums.ProjectMemberRole;
 import com.likelion.hackathon.domain.project.repository.ProjectMemberRepository;
 import com.likelion.hackathon.domain.project.repository.ProjectRepository;
+import com.likelion.hackathon.domain.review.repository.RequiredReviewRepository;
+import com.likelion.hackathon.domain.review.repository.ReviewActionRepository;
 import com.likelion.hackathon.domain.user.entity.User;
 import com.likelion.hackathon.domain.user.repository.UserRepository;
 import com.likelion.hackathon.global.exception.CustomException;
@@ -29,6 +44,17 @@ public class ProjectService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final AgendaRepository agendaRepository;
+    private final AgendaReferenceDocumentRepository agendaReferenceDocumentRepository;
+    private final PositionRepository positionRepository;
+    private final MeetingRepository meetingRepository;
+    private final MeetingLogRepository meetingLogRepository;
+    private final MeetingPositionRepository meetingPositionRepository;
+    private final TranscriptRepository transcriptRepository;
+    private final HoldItemRepository holdItemRepository;
+    private final CoordinationRecordRepository coordinationRecordRepository;
+    private final NumberConfirmationRepository numberConfirmationRepository;
+    private final RequiredReviewRepository requiredReviewRepository;
+    private final ReviewActionRepository reviewActionRepository;
     private final SourceDocumentRepository sourceDocumentRepository;
     private final SourceConnectionRepository sourceConnectionRepository;
 
@@ -95,20 +121,58 @@ public class ProjectService {
     }
 
     /**
-     * 프로젝트 삭제. agenda(=프론트의 "회의 준비")가 하나라도 생겼으면 거부한다 — agenda
-     * 밑으로 meeting/position/hold_item/transcript 등 테이블이 깊게 얽혀있어서(FK 그래프
-     * 참고), 이미 회의 준비/진행이 시작된 프로젝트를 통째로 지우는 cascade는 안전하게
-     * 구현하기엔 리스크가 너무 크다. agenda가 없으면 문서/연동/멤버만 지우면 되므로
-     * (문서/연동도 agenda가 없으면 자식 레코드가 없는 게 보장됨) 안전하게 지울 수 있다.
+     * 프로젝트를 자식 레코드 전체와 함께 삭제한다.
+     *
+     * FK 의존 순서(자식 → 부모):
+     *   hold_items → (meeting, meeting_log, number_confirmation, transcript)
+     *   number_confirmations, required_reviews, review_actions → meeting_logs
+     *   meeting_logs → (meeting, transcript, meeting_positions)
+     *   meeting_positions → (meeting, positions)
+     *   transcripts, coordination_records → meeting
+     *   meetings → agenda
+     *   agenda_reference_documents, positions(전 버전) → agenda
+     *   source_documents → (project, source_connections)
+     *   source_connections, project_members → project
      */
     @Transactional
     public void delete(UUID projectId) {
         UUID userId = SecurityUtil.getCurrentUserId();
         Project project = getProjectAndVerifyMember(projectId, userId);
 
-        if (!agendaRepository.findAllByProjectOrderByCreatedAtDesc(project).isEmpty()) {
-            throw new CustomException(ErrorCode.PROJECT_HAS_AGENDAS);
+        List<Agenda> agendas = agendaRepository.findAllByProjectOrderByCreatedAtDesc(project);
+
+        for (Agenda agenda : agendas) {
+            List<Meeting> meetings = meetingRepository.findAllByAgenda(agenda);
+
+            for (Meeting meeting : meetings) {
+                // 1. hold_items — meeting_log, number_confirmation, transcript를 FK로 참조하므로 먼저 삭제
+                holdItemRepository.deleteAll(holdItemRepository.findAllByMeeting(meeting));
+
+                // 2. meeting_log 종속 레코드 (number_confirmations, required_reviews, review_actions)
+                List<MeetingLog> meetingLogs = meetingLogRepository.findAllByMeetingOrderByTranscriptSpokenAt(meeting);
+                for (MeetingLog log : meetingLogs) {
+                    numberConfirmationRepository.findByMeetingLog(log).ifPresent(numberConfirmationRepository::delete);
+                    requiredReviewRepository.deleteAll(requiredReviewRepository.findAllByMeetingLog(log));
+                    reviewActionRepository.deleteAll(reviewActionRepository.findAllByMeetingLog(log));
+                }
+
+                // 3. meeting_logs — transcript, meeting_positions를 FK로 참조하므로 먼저 삭제
+                meetingLogRepository.deleteAll(meetingLogs);
+
+                // 4. meeting_positions, transcripts, coordination_records
+                meetingPositionRepository.deleteAll(meetingPositionRepository.findAllByMeeting(meeting));
+                transcriptRepository.deleteAll(transcriptRepository.findAllByMeetingOrderBySpokenAt(meeting));
+                coordinationRecordRepository.deleteAll(coordinationRecordRepository.findAllByMeeting(meeting));
+            }
+
+            meetingRepository.deleteAll(meetings);
+
+            // agenda 종속 레코드
+            agendaReferenceDocumentRepository.deleteAll(agendaReferenceDocumentRepository.findAllByAgenda(agenda));
+            positionRepository.deleteAll(positionRepository.findAllByAgenda(agenda));
         }
+
+        agendaRepository.deleteAll(agendas);
 
         // source_documents.connection_id가 source_connections를 참조하므로 문서를 먼저 지운다.
         sourceDocumentRepository.deleteAll(

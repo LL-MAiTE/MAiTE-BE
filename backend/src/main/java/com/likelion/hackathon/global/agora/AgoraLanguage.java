@@ -10,9 +10,12 @@ import java.util.Arrays;
  * 진행되는 문제가 있었다(사용자가 직접 발견). 이제 이 enum이 그 다섯 가지를 언어별로
  * 한 묶음으로 들고 있고, AgoraLanguage.from(agenda.getCounterpartLanguage())로 고른다.
  *
- * TTS voice_id는 MiniMax 공식 문서(system voice id list)에서 확인한 예시값이다 —
- * 계정/모델에 따라 사용 불가능한 값일 수 있으니, join 실패 로그(agora ConvAI error)에
- * voice_id 관련 오류가 뜨면 이 값부터 의심할 것.
+ * TTS voice_id는 MiniMax speech-2.8-turbo 시스템 보이스 목록 기준이다.
+ * - KO("Korean_CalmLady"), EN("English_CalmWoman"), JA("Japanese_CalmLady") — 실제 통화로 동작 확인됨.
+ * - DE("German_SweetLady"), FR("French_FemaleAnchor"), ZH("Chinese_Mandarin_Warm_Bestie") —
+ *   공개 문서 기반이며 계정/모델 버전에 따라 지원 여부가 다를 수 있다. Agora join 실패 로그에
+ *   voice_id 관련 오류가 뜨면 이 값을 "English_CalmWoman"으로 임시 교체해서 TTS 자체가
+ *   문제인지 voice_id가 문제인지 먼저 구분할 것.
  */
 public enum AgoraLanguage {
     KO(
@@ -37,6 +40,7 @@ public enum AgoraLanguage {
             "すみません、もう一度おっしゃっていただけますか？"
     ),
     DE(
+            // "German_SweetLady" — 공개 문서 기반, 미검증. 오류 시 "English_CalmWoman"으로 교체 테스트.
             "de", "German_SweetLady", "독일어(German)",
             "Hallo. Ich bin der KI-Verhandlungsvertreter für '%s'. Lassen Sie uns beginnen.",
             "Das muss intern geprüft werden. Wir melden uns in Kürze.",
@@ -44,13 +48,16 @@ public enum AgoraLanguage {
             "Entschuldigung, könnten Sie das wiederholen?"
     ),
     ZH(
-            "zh", "Chinese (Mandarin)_Warm_Bestie", "중국어(Chinese)",
+            // 이전: "Chinese (Mandarin)_Warm_Bestie" — 괄호/공백이 포함된 형식이라 API에서 거부될 가능성이 있어 수정.
+            // MiniMax 문서 패턴({Language}_{Style}) 기준으로 재구성, 미검증.
+            "zh", "Chinese_Mandarin_Warm_Bestie", "중국어(Chinese)",
             "您好，我是「%s」会议的AI谈判代表，我们开始吧。",
             "这需要内部审核，我们会尽快回复您。",
             "您好。",
             "不好意思，您能再说一遍吗？"
     ),
     FR(
+            // "French_FemaleAnchor" — 공개 문서 기반, 미검증. 오류 시 "English_CalmWoman"으로 교체 테스트.
             "fr", "French_FemaleAnchor", "프랑스어(French)",
             "Bonjour. Je suis le représentant IA pour la négociation « %s ». Commençons.",
             "Cela nécessite un examen interne. Nous reviendrons vers vous bientôt.",
