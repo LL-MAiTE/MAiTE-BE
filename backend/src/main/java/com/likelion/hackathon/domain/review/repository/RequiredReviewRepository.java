@@ -9,4 +9,5 @@ import java.util.UUID;
 
 public interface RequiredReviewRepository extends JpaRepository<RequiredReview, UUID> {
     List<RequiredReview> findAllByMeetingLog(MeetingLog meetingLog);
+    List<RequiredReview> findAllByMeetingLogIn(List<MeetingLog> meetingLogs);
 }

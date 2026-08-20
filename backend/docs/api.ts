@@ -39,6 +39,7 @@ import type {
   Transcript,
   CreateTranscriptRequest,
   HoldItem,
+  HoldItemStatus,
   Notification,
   NumberConfirmation,
   NumberConfirmationResponseType,
@@ -288,6 +289,10 @@ export const api = {
     /** POST /meetings/:id/transcripts */
     createTranscript: (id: string, body: CreateTranscriptRequest) =>
       request<Transcript>('POST', `/meetings/${id}/transcripts`, body),
+
+    /** GET /meetings/:id/transcripts — 전사 원문 목록 (실시간 대화 패널 폴링용) */
+    transcripts: (id: string) =>
+      request<Transcript[]>('GET', `/meetings/${id}/transcripts`),
   },
 
   // ── 보류 항목 ──────────────────────────────────────────────────────────
@@ -304,6 +309,10 @@ export const api = {
     /** POST /hold-items/:id/reopen */
     reopen: (id: string) =>
       request<HoldItem>('POST', `/hold-items/${id}/reopen`),
+
+    /** PATCH /hold-items/:id — 배치용 상태 변경 (타임아웃 자동확정 / 실시간조율필요) */
+    updateStatus: (id: string, status: Extract<HoldItemStatus, 'CONFIRMED_TIMEOUT' | 'NEEDS_REALTIME'>) =>
+      request<HoldItem>('PATCH', `/hold-items/${id}`, { status }),
   },
 
   // ── 숫자 확인 팝업 ────────────────────────────────────────────────────────
@@ -348,6 +357,10 @@ export const api = {
     /** PATCH /required-reviews/:id — 재현(답변 작성자)이 확인 처리 → status: "CONFIRMED" */
     confirm: (id: string) =>
       request<RequiredReview>('PATCH', `/required-reviews/${id}`),
+
+    /** GET /meetings/:id/required-reviews — 미팅에 걸린 필수 검토 항목 전체 조회 (사후검토 화면용) */
+    list: (meetingId: string) =>
+      request<RequiredReview[]>('GET', `/meetings/${meetingId}/required-reviews`),
   },
 
   // ── 사후 검토 ─────────────────────────────────────────────────────────────

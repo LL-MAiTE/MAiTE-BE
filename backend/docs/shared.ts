@@ -271,22 +271,34 @@ export interface MeetingLog {
 
 // ── 보류 항목 ─────────────────────────────────────────────────────────────
 
+export type HoldItemOrigin =
+  | 'DURING_MEETING' // 회의중_발생
+  | 'POST_RE_HOLD'   // 사후_재보류 (결과 검토에서 "재보류" 처리 시 생성)
+
 export type HoldItemStatus =
-  | 'PENDING'
-  | 'ANSWERED'
-  | 'REOPENED'
-  | 'CONFIRMED_TIMEOUT'
-  | 'NEEDS_REALTIME'
+  | 'UNRESOLVED'          // 미해결
+  | 'AWAITING_ANSWER'     // 답변대기 (후속 답변 전달됨, 24~48h 확정 대기)
+  | 'CONFIRMED_IMMEDIATE' // 확정_즉시만족
+  | 'CONFIRMED_TIMEOUT'   // 확정_타임아웃
+  | 'REOPENED'            // 재오픈됨
+  | 'NEEDS_REALTIME'      // 실시간조율필요 — 재오픈 상한(2회) 도달 시 종결
 
 export interface HoldItem {
   id: string
   meetingId: string
-  positionId: string
+  /** 이 보류가 어느 대화 로그에서 생겼는지 — 회의중 발생이면 있고, 드물게 없을 수 있음 */
+  meetingLogId?: string
+  origin: HoldItemOrigin
+  /** 보류 사유(자유 텍스트, "미확정 안건" 등 사람이 읽는 설명) */
+  reason?: string
   status: HoldItemStatus
   answerText?: string
+  answeredBy?: string
   answeredAt?: string
+  deliveredToCounterpartAt?: string
   reopenCount: number
   resolvedAt?: string
+  createdAt: string
 }
 
 // ── Agora 실시간 전사 (stream-message) ────────────────────────────────────
@@ -338,12 +350,13 @@ export interface NumberConfirmation {
 
 // ── 필수 검토 ─────────────────────────────────────────────────────────────
 
-export type RequiredReviewStatus = 'CONDITIONAL' | 'CONFIRMED'
+export type RequiredReviewStatus = 'CONDITIONAL' | 'CONFIRMED' | 'REVISED' | 'WITHDRAWN'
 
 export interface RequiredReview {
   id: string
   meetingLogId: string
   designatedBy: string
+  designatedAt: string
   status: RequiredReviewStatus
   reviewedBy?: string
   reviewedAt?: string
