@@ -30,6 +30,11 @@ public class MeetingController {
         return ApiResponse.ok(meetingService.getMeeting(id));
     }
 
+    @GetMapping("/agendas/{id}/meetings")
+    public ApiResponse<List<MeetingResponse>> getMeetingsByAgenda(@PathVariable UUID id) {
+        return ApiResponse.ok(meetingService.getMeetingsByAgenda(id));
+    }
+
     @PostMapping("/meetings/{id}/start")
     public ApiResponse<Map<String, Object>> startMeeting(@PathVariable UUID id) {
         return ApiResponse.ok(meetingService.startMeeting(id));

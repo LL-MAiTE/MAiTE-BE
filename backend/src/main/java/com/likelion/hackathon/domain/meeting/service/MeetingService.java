@@ -105,6 +105,21 @@ public class MeetingService {
         return MeetingResponse.from(meeting);
     }
 
+    /**
+     * 이 안건(agenda)에 딸린 Meeting 목록(오래된 순). 프론트가 "이 회의가 실제로 라이브를
+     * 한 번이라도 시작했는지, 시작했다면 지금 상태가 뭔지"를 알아야 회의 목록/상태를
+     * 정확히 그려낼 수 있는데 지금까지 그 조회 경로가 없어서(라이브 시작 시점에 저장해둔
+     * 파일 기반 매핑에만 의존) 다른 브라우저·기기에서 로그인하면 이미 라이브까지 진행한
+     * 회의도 안 보였다. Agenda당 보통 Meeting은 최대 1개지만(라이브 시작=최초 1회) 여러
+     * 번 재시도된 경우까지 고려해 목록으로 반환한다.
+     */
+    @Transactional(readOnly = true)
+    public List<MeetingResponse> getMeetingsByAgenda(UUID agendaId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        Agenda agenda = getAgendaAndVerify(agendaId, userId);
+        return meetingRepository.findAllByAgenda(agenda).stream().map(MeetingResponse::from).toList();
+    }
+
     @Transactional
     public Map<String, Object> startMeeting(UUID meetingId) {
         UUID userId = SecurityUtil.getCurrentUserId();
