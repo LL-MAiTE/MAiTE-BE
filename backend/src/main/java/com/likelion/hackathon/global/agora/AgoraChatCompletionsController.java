@@ -12,6 +12,7 @@ import com.likelion.hackathon.domain.meeting.repository.MeetingRepository;
 import com.likelion.hackathon.domain.meeting.service.MeetingService;
 import com.likelion.hackathon.global.openai.MatchIntentService;
 import com.likelion.hackathon.global.openai.NegotiationGuardrail;
+import com.likelion.hackathon.global.openai.OpenAiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -57,6 +58,7 @@ public class AgoraChatCompletionsController {
     private final MeetingService meetingService;
     private final MatchIntentService matchIntentService;
     private final NegotiationGuardrail guardrail;
+    private final OpenAiService openAiService;
     private final ObjectMapper objectMapper;
 
     // 이 턴을 어떻게 처리했는지 — meetingService.recordLiveTurn()에 그대로 넘겨서
@@ -174,16 +176,17 @@ public class AgoraChatCompletionsController {
                 return new ResolvedTurn(verified, false, position.getId(), null);
             }
 
-            // ⚠️ position.getAnswer()는 항상 한국어다(안건 초안 생성 규칙상 topic 외 모든
-            // 텍스트 필드가 한국어로 저장됨) — 이 폴백은 guardrail이 LLM 생성 문장을 거부한
-            // 드문 경우에만 타므로, 비한국어 상대방에게는 원문(한국어)이 그대로 나갈 수 있는
-            // 잔여 한계가 있다(알려진 이슈, 별도 개선 필요 — 실시간 번역 호출을 추가하면
-            // 이 경로의 지연이 늘어나서 지금은 보류).
+            // guardrail이 LLM 생성 문장을 거부한 드문 경우 — position.getAnswer()는 항상
+            // 한국어로 저장되므로, 비한국어 상대방에게는 번역 후 전달한다. 번역 실패 시
+            // 원문(한국어) 그대로 내보낸다 — 통화 자체가 끊기는 것보다 낫다.
             log.warn("[chat-completions] guardrail rejected generated response, falling back to raw answer. topic={}",
                     position.getTopic());
-            return new ResolvedTurn(
-                    position.getAnswer() != null ? position.getAnswer() : language.getHoldMessage(),
-                    false, position.getId(), null);
+            String fallback = position.getAnswer() != null ? position.getAnswer() : language.getHoldMessage();
+            if (language != AgoraLanguage.KO && position.getAnswer() != null) {
+                String translated = openAiService.translate(position.getAnswer(), language.getDisplayName());
+                if (translated != null) fallback = translated;
+            }
+            return new ResolvedTurn(fallback, false, position.getId(), null);
 
         } catch (IllegalArgumentException e) {
             log.warn("[chat-completions] invalid meetingId format: {}", meetingId);
