@@ -16,6 +16,7 @@ import com.likelion.hackathon.global.github.GitHubService;
 import com.likelion.hackathon.global.notion.NotionService;
 import com.likelion.hackathon.global.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -134,6 +135,20 @@ public class DocumentService {
                 .build();
         documentRepository.save(doc);
         return SourceDocumentResponse.from(doc);
+    }
+
+    @Transactional
+    public void deleteDocument(UUID documentId) {
+        UUID userId = SecurityUtil.getCurrentUserId();
+        SourceDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SOURCE_DOCUMENT_NOT_FOUND));
+        projectService.getProjectAndVerifyMember(doc.getProject().getId(), userId);
+        try {
+            documentRepository.delete(doc);
+            documentRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new CustomException(ErrorCode.DOCUMENT_IN_USE);
+        }
     }
 
     @Transactional
