@@ -151,6 +151,10 @@ export const api = {
     /** GET /documents/:id — 단건 조회, content(본문) 포함 */
     get: (documentId: string) =>
       request<SourceDocumentDetail>('GET', `/documents/${documentId}`),
+
+    /** DELETE /documents/:id — 안건 참조 문서로 쓰이고 있으면 409(DOCUMENT_IN_USE)로 거부됨 */
+    remove: (documentId: string) =>
+      request<{ success: boolean }>('DELETE', `/documents/${documentId}`),
   },
 
   // ── 문서 연동 (Notion/Git) ─────────────────────────────────────────────
